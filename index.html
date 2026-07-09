@@ -107,6 +107,14 @@ body.privacy .pv{filter:blur(8px);user-select:none;pointer-events:none}
 .sb-sub-item i{font-size:15px;color:var(--txt3);flex-shrink:0}
 .sb-foot{padding:10px 8px;border-top:1px solid var(--brd);display:flex;flex-direction:column;gap:6px}
 .sb-user{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--txt2);font-weight:600;padding:4px 6px;overflow:hidden}
+.sync-indicator{display:flex;align-items:center;gap:6px;font-size:11px;font-weight:700;padding:5px 8px;border-radius:7px;margin-bottom:4px}
+.sync-indicator i{font-size:13px}
+.sync-saving{background:var(--blue-l);color:#1d4ed8}
+.sync-saving i{animation:spin .8s linear infinite}
+@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
+.sync-saved{background:#dcfce7;color:#15803d}
+.sync-error{background:#fef2f2;color:#b91c1c}
+.sync-conflict{background:#fef3c7;color:#92400e}
 .sb-user i{color:var(--green);font-size:15px;flex-shrink:0}
 .sb-user span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .sb-foot-btns{display:flex;gap:5px;flex-wrap:wrap}
@@ -675,12 +683,14 @@ label.btn-like:hover{background:var(--surf2)}
     <span class="alert-badge" id="alertBadge" style="display:none">0</span>
   </div>
   <div class="sb-foot">
+    <div id="syncIndicator" class="sync-indicator" style="display:none"></div>
     <div class="sb-user" id="userChip" style="display:none"><i class="ti ti-user-circle"></i><span id="userEmail"></span></div>
     <div class="sb-foot-btns">
       <button onclick="exportData()" title="Exportar"><i class="ti ti-download"></i></button>
       <label class="btn-like" title="Importar backup JSON"><i class="ti ti-upload"></i><input type="file" accept=".json" onchange="importData(event)" style="display:none"></label>
       <label class="btn-like" title="Importar extrato OFX/OFC do banco" style="background:var(--blue-l);color:#1d4ed8;border-color:var(--blue)"><i class="ti ti-file-import"></i><input type="file" accept=".ofx,.ofc,.qfx,.txt" onchange="openOfxImport(event)" style="display:none"></label>
       <button id="btnRecuperar" onclick="recuperarDadosLocais()" title="Recuperar dados locais" style="display:none;background:#EF9F27;color:#fff;border-color:#EF9F27"><i class="ti ti-database-import"></i></button>
+      <button onclick="abrirHistoricoVersoes()" title="Restaurar versão anterior"><i class="ti ti-history"></i></button>
       <button onclick="logout()" id="btnLogout" style="display:none" title="Sair"><i class="ti ti-logout"></i></button>
     </div>
   </div>
@@ -1165,6 +1175,9 @@ const SB_URL='https://taofunjbnjbrwnzxnxov.supabase.co';
 const SB_KEY='sb_publishable_ujKWl7daWvv-gsnvKkXybQ_tZPrYUEQ';
 const sb=supabase.createClient(SB_URL,SB_KEY);
 let currentUser=null;
+let lastKnownUpdatedAt=null; // timestamp da versão da nuvem que carregamos por último (controle de concorrência)
+let saveQueue=Promise.resolve(); // fila para evitar saves simultâneos correndo por cima um do outro
+let saveRetryTimer=null;
 
 /* ── AUTH UI ── */
 let authMode='login';
@@ -1226,27 +1239,98 @@ async function logout(){
 }
 
 /* ── SUPABASE DATA ── */
-async function saveToCloud(){
+function setSyncStatus(status){
+  // status: 'saving' | 'saved' | 'error' | 'conflict'
+  const el=document.getElementById('syncIndicator');
+  if(!el)return;
+  const cfg={
+    saving:{icon:'ti-loader-2',cls:'sync-saving',txt:'Salvando...'},
+    saved:{icon:'ti-cloud-check',cls:'sync-saved',txt:'Salvo na nuvem'},
+    error:{icon:'ti-cloud-off',cls:'sync-error',txt:'Falha ao salvar — tentando novamente'},
+    conflict:{icon:'ti-alert-triangle',cls:'sync-conflict',txt:'Dados novos encontrados na nuvem'}
+  }[status];
+  if(!cfg)return;
+  el.className='sync-indicator '+cfg.cls;
+  el.innerHTML='<i class="ti '+cfg.icon+'"></i><span>'+cfg.txt+'</span>';
+  el.style.display='flex';
+  if(status==='saved'){clearTimeout(el._hideTo);el._hideTo=setTimeout(()=>{el.style.display='none';},2500);}
+}
+
+async function _doSaveToCloud(){
   if(!currentUser)return;
+  setSyncStatus('saving');
   try{
-    const{error}=await sb.from('user_data').upsert({user_id:currentUser.id,data:state,updated_at:new Date().toISOString()},{onConflict:'user_id'});
-    if(error){
-      console.warn('Erro ao salvar na nuvem:',error);
-      showToast('⚠️ Salvo localmente (nuvem indisponível)','blue');
+    // 1) Verifica se a nuvem tem uma versão mais nova que a que carregamos (conflito de outro dispositivo/aba)
+    if(lastKnownUpdatedAt){
+      const{data:cur,error:checkErr}=await sb.from('user_data').select('updated_at').eq('user_id',currentUser.id).single();
+      if(!checkErr&&cur&&cur.updated_at&&cur.updated_at>lastKnownUpdatedAt){
+        setSyncStatus('conflict');
+        showConflictModal();
+        return; // não sobrescreve — espera decisão do usuário
+      }
     }
+    const nowIso=new Date().toISOString();
+    const{error}=await sb.from('user_data').upsert({user_id:currentUser.id,data:state,updated_at:nowIso},{onConflict:'user_id'});
+    if(error)throw error;
+    lastKnownUpdatedAt=nowIso;
+    // 2) Grava snapshot no histórico (não bloqueia o fluxo principal se falhar)
+    sb.from('user_data_history').insert({user_id:currentUser.id,data:state}).then(({error:histErr})=>{
+      if(histErr)console.warn('Erro ao gravar histórico:',histErr);
+    });
+    setSyncStatus('saved');
+    clearTimeout(saveRetryTimer);
   }catch(e){
     console.warn('Erro ao salvar na nuvem:',e);
-    showToast('⚠️ Salvo localmente (nuvem indisponível)','blue');
+    setSyncStatus('error');
+    // Retry automático em 8s
+    clearTimeout(saveRetryTimer);
+    saveRetryTimer=setTimeout(()=>{saveToCloud();},8000);
   }
+}
+
+function saveToCloud(){
+  // Enfileira para nunca ter dois saves correndo ao mesmo tempo e se atropelando
+  saveQueue=saveQueue.then(()=>_doSaveToCloud()).catch(()=>{});
+  return saveQueue;
+}
+
+let pendingCloudState=null;
+function showConflictModal(){
+  if(document.getElementById('conflictModal'))return;
+  const box=document.createElement('div');
+  box.id='conflictModal';
+  box.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:950;display:flex;align-items:center;justify-content:center;padding:16px';
+  box.innerHTML=`<div style="background:var(--surf);border-radius:14px;max-width:420px;width:100%;padding:24px;box-shadow:0 20px 60px rgba(0,0,0,.4);border:1px solid var(--brd)">
+    <div style="font-size:16px;font-weight:800;color:var(--txt);margin-bottom:8px"><i class="ti ti-alert-triangle" style="color:#f59e0b"></i> Dados diferentes encontrados</div>
+    <div style="font-size:13px;color:var(--txt2);line-height:1.6;margin-bottom:18px">Outro dispositivo ou aba salvou alterações mais recentes na nuvem. Para não perder nada, escolha o que fazer:</div>
+    <div style="display:flex;flex-direction:column;gap:8px">
+      <button onclick="resolveConflictUseCloud()" style="padding:11px 14px;border-radius:9px;background:var(--blue-l);border:1.5px solid var(--blue);color:#1d4ed8;font-size:14px;font-weight:700;cursor:pointer;text-align:left"><i class="ti ti-cloud-download"></i> Usar a versão mais recente da nuvem <div style="font-size:11px;font-weight:400;margin-top:2px">Recomendado — descarta suas alterações não salvas nesta aba</div></button>
+      <button onclick="resolveConflictKeepMine()" style="padding:11px 14px;border-radius:9px;background:#fef2f2;border:1.5px solid #ef4444;color:#b91c1c;font-size:14px;font-weight:700;cursor:pointer;text-align:left"><i class="ti ti-device-floppy"></i> Manter minhas alterações desta aba <div style="font-size:11px;font-weight:400;margin-top:2px">Sobrescreve a versão da nuvem com o que está aqui</div></button>
+    </div>
+  </div>`;
+  document.body.appendChild(box);
+}
+async function resolveConflictUseCloud(){
+  document.getElementById('conflictModal')?.remove();
+  await loadFromCloud();
+  render();
+  showToast('✅ Versão mais recente da nuvem carregada.','green');
+}
+async function resolveConflictKeepMine(){
+  document.getElementById('conflictModal')?.remove();
+  lastKnownUpdatedAt=null; // pula a checagem de conflito desta vez
+  await _doSaveToCloud();
+  showToast('✅ Suas alterações foram salvas por cima.','green');
 }
 
 async function loadFromCloud(){
   if(!currentUser)return false;
   try{
-    const{data,error}=await sb.from('user_data').select('data').eq('user_id',currentUser.id).single();
+    const{data,error}=await sb.from('user_data').select('data,updated_at').eq('user_id',currentUser.id).single();
     if(error&&error.code!=='PGRST116')throw error;
     if(data&&data.data){
       state=data.data;
+      lastKnownUpdatedAt=data.updated_at||null;
       if(!state.recurrentes)state.recurrentes=[];
       if(!state.customCats)state.customCats={receita:[],despesa:[]};
       if(!state.catColors)state.catColors={};
@@ -1708,9 +1792,19 @@ function normalizeCatNames(){
   if(changed>0){save();showToast(`✅ ${changed} categoria${changed>1?'s':''} normalizada${changed>1?'s':''}. Dados salvos.`,'green');}
   else{showToast('Todas as categorias já estão normalizadas.','blue');}
 }
+const LOCAL_HIST_KEY='cf_local_history';
+function pushLocalHistory(){
+  try{
+    let hist=JSON.parse(localStorage.getItem(LOCAL_HIST_KEY)||'[]');
+    hist.push({t:Date.now(),data:state});
+    if(hist.length>15)hist=hist.slice(hist.length-15); // mantém só os últimos 15 saves
+    localStorage.setItem(LOCAL_HIST_KEY,JSON.stringify(hist));
+  }catch(e){/* localStorage cheio ou indisponível — não bloqueia o save principal */}
+}
 function save(){
   try{localStorage.setItem(KEY,JSON.stringify(state))}catch(e){}
-  saveToCloud(); // async fire-and-forget
+  pushLocalHistory();
+  return saveToCloud(); // enfileirado, com retry e detecção de conflito
 }
 
 function load(){
@@ -1776,6 +1870,82 @@ function renderNotas(){
       </div>`;
     }).join('')+'</div>';
 }
+/* ── HISTÓRICO DE VERSÕES ── */
+async function abrirHistoricoVersoes(){
+  if(!currentUser){showToast('Faça login para ver o histórico.','red');return;}
+  const existing=document.getElementById('histModal');
+  if(existing)existing.remove();
+  const box=document.createElement('div');
+  box.id='histModal';
+  box.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:950;display:flex;align-items:center;justify-content:center;padding:16px';
+  box.innerHTML=`<div style="background:var(--surf);border-radius:14px;max-width:520px;width:100%;max-height:85vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.4);border:1px solid var(--brd)">
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:18px 20px 14px;border-bottom:1px solid var(--brd)">
+      <div style="font-size:16px;font-weight:800;color:var(--txt)"><i class="ti ti-history"></i> Histórico de Versões</div>
+      <button onclick="document.getElementById('histModal').remove()" style="background:none;border:none;font-size:22px;color:var(--txt3);cursor:pointer">&times;</button>
+    </div>
+    <div id="histBody" style="overflow-y:auto;padding:14px 20px;flex:1">
+      <div style="text-align:center;padding:30px;color:var(--txt3)"><i class="ti ti-loader-2" style="animation:spin .8s linear infinite;font-size:22px"></i><div style="margin-top:8px">Carregando histórico...</div></div>
+    </div>
+  </div>`;
+  document.body.appendChild(box);
+
+  const{data,error}=await sb.from('user_data_history').select('id,created_at,data').eq('user_id',currentUser.id).order('created_at',{ascending:false}).limit(50);
+  const body=document.getElementById('histBody');
+  const MESES=['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+
+  let localHist=[];
+  try{localHist=JSON.parse(localStorage.getItem(LOCAL_HIST_KEY)||'[]').reverse();}catch(e){}
+
+  if(error||!data||!data.length){
+    if(!localHist.length){
+      body.innerHTML='<div style="text-align:center;padding:30px;color:var(--txt3)">Nenhum snapshot ainda. O histórico começa a ser gravado a partir de agora, a cada alteração salva.</div>';
+      return;
+    }
+    window._histSnapshots=localHist.map(h=>({created_at:new Date(h.t).toISOString(),data:h.data}));
+    body.innerHTML='<div style="font-size:11px;color:#b45309;background:#fef3c7;padding:8px 10px;border-radius:7px;margin-bottom:10px"><i class="ti ti-alert-triangle"></i> Nuvem indisponível — mostrando snapshots salvos apenas neste dispositivo</div>'+
+      window._histSnapshots.map((snap,i)=>renderHistItem(snap,i,MESES)).join('');
+    return;
+  }
+
+  window._histSnapshots=data;
+  body.innerHTML=data.map((snap,i)=>renderHistItem(snap,i,MESES)).join('');
+}
+function renderHistItem(snap,i,MESES){
+  const d=new Date(snap.created_at);
+  const ds=String(d.getDate()).padStart(2,'0')+'/'+MESES[d.getMonth()]+'/'+d.getFullYear()+' às '+String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');
+  const nTx=(snap.data.transactions||[]).length;
+  return`<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;border:1px solid var(--brd);border-radius:9px;margin-bottom:8px">
+    <div>
+      <div style="font-size:13px;font-weight:700;color:var(--txt)">${ds}</div>
+      <div style="font-size:11px;color:var(--txt3)">${nTx} lançamentos</div>
+    </div>
+    <button onclick="restaurarSnapshot(${i})" style="padding:7px 14px;border-radius:7px;background:var(--blue-l);border:1px solid var(--blue);color:#1d4ed8;font-size:12px;font-weight:700;cursor:pointer"><i class="ti ti-arrow-back-up"></i> Restaurar</button>
+  </div>`;
+}
+async function restaurarSnapshot(idx){
+  const snap=(window._histSnapshots||[])[idx];
+  if(!snap)return;
+  const d=new Date(snap.created_at);
+  if(!confirm('Restaurar os dados de '+d.toLocaleString('pt-BR')+'?\n\nIsso vai substituir os dados atuais por essa versão. Um backup do estado atual será salvo no histórico antes.'))return;
+  // salva o estado atual como snapshot antes de sobrescrever, por segurança
+  if(currentUser){
+    try{await sb.from('user_data_history').insert({user_id:currentUser.id,data:state});}catch(e){}
+  }
+  state=snap.data;
+  if(!state.recurrentes)state.recurrentes=[];
+  if(!state.customCats)state.customCats={receita:[],despesa:[]};
+  if(!state.catColors)state.catColors={};
+  if(!state.accounts)state.accounts=[];
+  if(!state.metas)state.metas=[];
+  if(!state.cartoes)state.cartoes=[];
+  if(!state.notas)state.notas=[];
+  lastKnownUpdatedAt=null;
+  await save();
+  document.getElementById('histModal')?.remove();
+  render();
+  showToast('✅ Dados restaurados com sucesso!','green');
+}
+
 function abrirFormNota(id){
   editNotaId=id||null;
   const n=id?(state.notas||[]).find(x=>x.id===id):null;
