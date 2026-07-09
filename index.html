@@ -1102,13 +1102,13 @@ label.btn-like:hover{background:var(--surf2)}
       <div class="f-fld"><label id="fAmtLbl">Valor total (R$) *</label><input type="number" id="fAmt" min="0" step="0.01" placeholder="0,00"></div>
       <div class="f-fld"><label>Categoria <button type="button" onclick="openCatModal()" style="font-size:11px;padding:2px 7px;margin-left:4px;background:var(--surf2);border-color:var(--brd2);color:var(--txt3)"><i class="ti ti-pencil" style="font-size:11px"></i>Editar</button></label><select id="fCat"></select></div>
       <div class="f-fld"><label>Data *</label><input type="date" id="fDate"></div>
-      <div class="f-fld"><label>Subcategoria <span style="font-size:11px;color:var(--txt3);font-weight:400">(opcional)</span></label><input type="text" id="fSubcat" list="subcatList" placeholder="Ex: Itaú, Mercado Livre..."><datalist id="subcatList"></datalist></div>
+      <div class="f-fld" id="fSubcatWrap" style="display:none"><label>Subcategoria <span style="font-size:11px;color:var(--txt3);font-weight:400">(opcional)</span></label><input type="text" id="fSubcat" list="subcatList" placeholder="Ex: Itaú, Mercado Livre..."><datalist id="subcatList"></datalist></div>
       <div class="f-fld" id="fDebtorWrap"><label>Devedor (terceiro)</label><input type="text" id="fDebtor" placeholder="Nome de quem vai pagar"></div>
       <div class="f-fld f-full" id="fMeioWrap"><label>Meio de pagamento <span style="font-size:11px;color:var(--txt3);font-weight:400">(opcional)</span></label>
         <div class="meio-btns" id="meioBtns"></div>
       </div>
-      <div class="f-fld f-full" id="fAccountWrap"><label id="fAccountLbl">Conta debitada <span style="font-size:11px;color:var(--txt3);font-weight:400">(opcional)</span></label><select id="fAccount"><option value="">Nenhuma conta</option></select></div>
       <div class="f-fld f-full" id="fCartaoWrap" style="display:none"><label>Cartão de crédito</label><select id="fCartaoId" onchange="ajustarDataCartao()"><option value="">Selecione...</option></select></div>
+      <div class="f-fld f-full" id="fAccountWrap"><label id="fAccountLbl">Conta debitada <span style="font-size:11px;color:var(--txt3);font-weight:400">(opcional)</span></label><select id="fAccount"><option value="">Nenhuma conta</option></select></div>
       <div class="f-fld" id="fCompensacaoWrap" style="display:none"><label>Data de compensação <span style="font-size:11px;color:var(--txt3)">(cheque)</span></label><input type="date" id="fCompensacao"></div>
     </div>
     <div class="f-checks">
@@ -2814,16 +2814,11 @@ function saveTx(){
   const status=document.getElementById('fPago').checked?'pago':'pendente';
   let accountId=document.getElementById('fAccount').value||null;
   const cartaoId=(meioPagamentoSel==='credito'?document.getElementById('fCartaoId').value:null)||null;
-  // Inferir conta automaticamente
-  if(fType==='despesa'){
-    if(meioPagamentoSel==='credito'&&cartaoId){
-      // conta debitadora da fatura do cartão
-      const c=state.cartoes.find(x=>x.id===cartaoId);
-      accountId=c?c.contaDebitadoraId||null:null;
-    } else if(meioPagamentoSel==='dinheiro'){
-      const carteira=state.accounts.find(a=>a.type==='Carteira'||a.name.toLowerCase().includes('carteira'));
-      accountId=carteira?carteira.id:null;
-    }
+  // Crédito: usa a conta de pagamento escolhida no campo (já pré-preenchida com a conta padrão do cartão).
+  // Dinheiro: continua sendo inferido automaticamente, já que o campo fica oculto nesse caso.
+  if(fType==='despesa'&&meioPagamentoSel==='dinheiro'){
+    const carteira=state.accounts.find(a=>a.type==='Carteira'||a.name.toLowerCase().includes('carteira'));
+    accountId=carteira?carteira.id:null;
   }
   const dataCompensacao=(meioPagamentoSel==='cheque'?document.getElementById('fCompensacao').value:null)||null;
   if(!desc||!amount||amount<=0||!date){alert('Preencha descricao, valor e data.');return}
@@ -3665,7 +3660,7 @@ function updateMeioUI(){
   const isCredito=meioPagamentoSel==='credito';
   const isDinheiro=meioPagamentoSel==='dinheiro';
   const isCheque=meioPagamentoSel==='cheque';
-  const needsAccount=meioPagamentoSel&&!isCredito&&!isDinheiro; // PIX, débito, TED, boleto, cheque, débito automático
+  const needsAccount=meioPagamentoSel&&!isDinheiro; // PIX, débito, TED, boleto, cheque, débito automático e agora também crédito
   const cartaoWrap=document.getElementById('fCartaoWrap');
   const compWrap=document.getElementById('fCompensacaoWrap');
   const accWrap=document.getElementById('fAccountWrap');
@@ -3676,7 +3671,9 @@ function updateMeioUI(){
     accWrap.style.display=needsAccount?'block':'none';
     if(needsAccount){
       const lbl=document.getElementById('fAccountLbl');
-      if(lbl)lbl.innerHTML='Conta debitada <span style="font-size:11px;color:var(--txt3);font-weight:400">(opcional)</span>';
+      if(lbl)lbl.innerHTML=isCredito
+        ?'Conta de pagamento <span style="font-size:11px;color:var(--txt3);font-weight:400">(opcional — pode trocar ao pagar a fatura)</span>'
+        :'Conta debitada <span style="font-size:11px;color:var(--txt3);font-weight:400">(opcional)</span>';
     }
     // Auto-select Carteira for dinheiro
     if(isDinheiro){
@@ -3697,7 +3694,11 @@ function ajustarDataCartao(){
   const cartaoId=document.getElementById('fCartaoId').value;
   if(!cartaoId)return;
   const cartao=state.cartoes.find(c=>c.id===cartaoId);
-  if(!cartao||!cartao.diaVencimento)return;
+  if(!cartao)return;
+  // pré-preenche a conta de pagamento com a padrão do cartão, só se o campo ainda estiver vazio
+  const accSel=document.getElementById('fAccount');
+  if(accSel&&!accSel.value&&cartao.contaDebitadoraId)accSel.value=cartao.contaDebitadoraId;
+  if(!cartao.diaVencimento)return;
   const diaVenc=parseInt(cartao.diaVencimento);
   const diaFech=cartao.diaFechamento?parseInt(cartao.diaFechamento):null;
   // usa a data já informada no campo, senão hoje
@@ -4064,8 +4065,8 @@ function buildAlerts(){
     }
   });
   // good news
-  const recPago=state.transactions.filter(t=>t.type==='receita'&&t.status==='pago'&&new Date(t.date).getMonth()===cm&&new Date(t.date).getFullYear()===cy).reduce((s,t)=>s+t.amount,0);
-  const desPago=state.transactions.filter(t=>t.type==='despesa'&&t.status==='pago'&&new Date(t.date).getMonth()===cm&&new Date(t.date).getFullYear()===cy).reduce((s,t)=>s+t.amount,0);
+  const recPago=state.transactions.filter(t=>t.type==='receita'&&t.status==='pago'&&new Date(t.date+'T00:00:00').getMonth()===cm&&new Date(t.date+'T00:00:00').getFullYear()===cy).reduce((s,t)=>s+t.amount,0);
+  const desPago=state.transactions.filter(t=>t.type==='despesa'&&t.status==='pago'&&!t.debtor&&new Date(t.date+'T00:00:00').getMonth()===cm&&new Date(t.date+'T00:00:00').getFullYear()===cy).reduce((s,t)=>s+t.amount,0);
   if(recPago>0&&desPago<recPago*0.5)alerts.push({type:'success',icon:'ti-mood-happy',text:'Ótimo mês! Você gastou menos de 50% da receita confirmada.'});
   return alerts;
 }
