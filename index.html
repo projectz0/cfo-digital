@@ -2177,9 +2177,20 @@ function renderPainelExtras(){
   const desPago=txs.filter(t=>t.type==='despesa'&&t.status==='pago'&&!t.debtor).reduce((s,t)=>s+t.amount,0);
   const recPend=txs.filter(t=>t.type==='receita'&&t.status==='pendente').reduce((s,t)=>s+t.amount,0);
   const desPend=txs.filter(t=>t.type==='despesa'&&t.status==='pendente'&&!t.debtor).reduce((s,t)=>s+t.amount,0);
+  // Para o saldo projetado, só entram pendentes cuja conta vinculada de fato compõe
+  // saldoAtual (existe E está marcada para "Incluir no Saldo das Contas"). Sem isso,
+  // pagar uma despesa sem conta computada some do "pendente" mas nunca sai de saldoAtual,
+  // fazendo o saldo projetado subir em vez de ficar estável.
+  const contaContaValida=id=>{
+    if(!id)return false;
+    const acc=(state.accounts||[]).find(a=>a.id===id);
+    return acc&&accInBalance(acc);
+  };
+  const recPendProj=txs.filter(t=>t.type==='receita'&&t.status==='pendente'&&contaContaValida(t.accountId)).reduce((s,t)=>s+t.amount,0);
+  const desPendProj=txs.filter(t=>t.type==='despesa'&&t.status==='pendente'&&!t.debtor&&contaContaValida(t.accountId)).reduce((s,t)=>s+t.amount,0);
   const transfSavingPend=txs.filter(t=>t.type==='transferencia'&&t.direction==='saida'&&t.status==='pendente'&&isSavingAccount(t.destAccountId)).reduce((s,t)=>s+t.amount,0);
   const saldoAtual=(state.accounts||[]).filter(a=>accInBalance(a)).reduce((s,a)=>s+getAccountBalance(a),0);
-  const saldoProj=saldoAtual+recPend-desPend-transfSavingPend;
+  const saldoProj=saldoAtual+recPendProj-desPendProj-transfSavingPend;
   // previous month stats
   let pm=cm-1,py=cy;if(pm<0){pm=11;py--;}
   const prev=state.transactions.filter(t=>{const d=new Date(t.date+'T00:00:00');return d.getMonth()===pm&&d.getFullYear()===py;});
@@ -2240,10 +2251,11 @@ function renderPainelExtras(){
     <div class="pe-card">
       <div class="pe-title"><i class="ti ti-chart-arrows-vertical"></i> Saldo Projetado</div>
       <div class="proj-row"><span class="proj-lbl">Saldo Atual</span><span class="proj-val" style="color:${saldoAtual>=0?'var(--green-d)':'var(--red-d)'}">${fmt(saldoAtual)}</span></div>
-      <div class="proj-row"><span class="proj-lbl">+ Receitas pendentes</span><span class="proj-val" style="color:var(--green-d)">+${fmt(recPend)}</span></div>
-      <div class="proj-row"><span class="proj-lbl">− Despesas pendentes</span><span class="proj-val" style="color:var(--red-d)">−${fmt(desPend)}</span></div>
+      <div class="proj-row"><span class="proj-lbl">+ Receitas pendentes</span><span class="proj-val" style="color:var(--green-d)">+${fmt(recPendProj)}</span></div>
+      <div class="proj-row"><span class="proj-lbl">− Despesas pendentes</span><span class="proj-val" style="color:var(--red-d)">−${fmt(desPendProj)}</span></div>
       ${transfSavingPend>0?`<div class="proj-row"><span class="proj-lbl">− Reserva/Investimento</span><span class="proj-val" style="color:var(--red-d)">−${fmt(transfSavingPend)}</span></div>`:''}
       <div class="proj-row proj-total"><span class="proj-lbl">Saldo Projetado</span><span class="proj-val" style="color:${saldoProj>=0?'var(--green-d)':'var(--red-d)'}">${fmt(saldoProj)}</span></div>
+      ${(recPend>recPendProj||desPend>desPendProj)?`<div style="font-size:10px;color:var(--txt3);margin-top:6px;line-height:1.4"><i class="ti ti-info-circle"></i> ${fmt((recPend-recPendProj)+(desPend-desPendProj))} em pendentes sem conta vinculada não entram nessa conta — vincule uma conta para incluir.</div>`:''}
     </div>
     <div class="pe-card">
       <div class="pe-title"><i class="ti ti-trending-up"></i> Comparação com ${prevMonth}</div>
@@ -2890,7 +2902,65 @@ function saveTx(){
 }
 
 function markSt(id,st){
-  const t=state.transactions.find(x=>x.id===id);if(t){t.status=st;save();render()}
+  const t=state.transactions.find(x=>x.id===id);if(!t)return;
+  if(st==='pago'&&(t.type==='despesa'||t.type==='receita')&&!t.debtor){
+    const c=t.cartaoId?(state.cartoes||[]).find(x=>x.id===t.cartaoId):null;
+    const defaultAcc=t.accountId||(c?c.contaDebitadoraId:null);
+    const label=(t.type==='receita'?'Confirmar recebimento':'Confirmar pagamento')+' — "'+t.description+'"'+(c?' · '+c.nome:'');
+    abrirPromptConta([id],t.type,defaultAcc,label,t.amount);
+    return;
+  }
+  t.status=st;save();render();
+}
+
+/* ── CONFIRMAÇÃO DE CONTA NO PAGAMENTO ── */
+let _pendingContaPagamento=null;
+function abrirPromptConta(ids,tipo,defaultAccountId,contextLabel,valorTotal){
+  const accs=state.accounts||[];
+  if(!accs.length){
+    ids.forEach(id=>{const t=state.transactions.find(x=>x.id===id);if(t)t.status='pago';});
+    save();render();
+    showToast('Marcado como pago (nenhuma conta cadastrada).','green');
+    return;
+  }
+  _pendingContaPagamento={ids};
+  const verbo=tipo==='receita'?'entrou':'saiu';
+  document.getElementById('contaPagModal')?.remove();
+  const opts=accs.map(a=>`<option value="${a.id}"${a.id===defaultAccountId?' selected':''}>${a.name}</option>`).join('');
+  const box=document.createElement('div');
+  box.id='contaPagModal';
+  box.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:960;display:flex;align-items:center;justify-content:center;padding:16px';
+  box.innerHTML=`<div style="background:var(--surf);border-radius:14px;max-width:380px;width:100%;padding:22px;box-shadow:0 20px 60px rgba(0,0,0,.35);border:1px solid var(--brd)">
+    <div style="font-size:15px;font-weight:800;color:var(--txt);margin-bottom:4px"><i class="ti ti-building-bank" style="color:var(--blue)"></i> ${tipo==='receita'?'Confirmar recebimento':'Confirmar pagamento'}</div>
+    <div style="font-size:13px;color:var(--txt2);margin-bottom:14px;line-height:1.5">${contextLabel}${valorTotal?' — <strong>'+fmt(valorTotal)+'</strong>':''}</div>
+    <label style="font-size:12px;font-weight:700;color:var(--txt3);display:block;margin-bottom:6px">DE QUAL CONTA O DINHEIRO ${verbo.toUpperCase()}?</label>
+    <select id="contaPagSelect" style="width:100%;padding:10px 12px;border-radius:8px;border:1.5px solid var(--brd2);background:var(--surf2);color:var(--txt);font-size:14px;margin-bottom:16px">
+      <option value="">Nenhuma conta específica</option>
+      ${opts}
+    </select>
+    <div style="display:flex;gap:8px">
+      <button onclick="document.getElementById('contaPagModal').remove();_pendingContaPagamento=null" style="flex:1;padding:10px;border-radius:8px;background:var(--surf2);border:1px solid var(--brd2);color:var(--txt2);font-size:14px;font-weight:600;cursor:pointer">Cancelar</button>
+      <button onclick="confirmarContaPagamento()" style="flex:1;padding:10px;border-radius:8px;background:var(--blue);border:none;color:#fff;font-size:14px;font-weight:700;cursor:pointer"><i class="ti ti-check"></i> Confirmar</button>
+    </div>
+  </div>`;
+  document.body.appendChild(box);
+}
+function confirmarContaPagamento(){
+  if(!_pendingContaPagamento)return;
+  const accountId=document.getElementById('contaPagSelect').value||null;
+  const {ids}=_pendingContaPagamento;
+  ids.forEach(id=>{
+    const t=state.transactions.find(x=>x.id===id);
+    if(!t)return;
+    t.status='pago';
+    // despesa de terceiro não debita conta — é acompanhada à parte em Terceiros.
+    // Só vale a partir de agora: pagamentos já confirmados no passado não são recalculados.
+    t.accountId=t.debtor?null:accountId;
+  });
+  document.getElementById('contaPagModal')?.remove();
+  _pendingContaPagamento=null;
+  save();render();
+  showToast('✅ Confirmado'+(ids.length>1?' — '+ids.length+' lançamentos':'')+'.','green');
 }
 
 function delTx(id){
@@ -3480,6 +3550,11 @@ function renderFaturas(){
       <button class="btn" style="background:#F59E0B;color:#fff;border-color:#D97706;font-size:13px;padding:6px 14px" onclick="pagarFatura('${faturaCartaoSel}')"><i class="ti ti-check"></i> Marcar como paga</button>
     </div>`;
   }
+  if(pagas>0){
+    html+=`<div style="display:flex;justify-content:flex-end;margin-bottom:14px">
+      <button style="background:none;border:1px solid var(--brd2);color:var(--txt3);font-size:12px;padding:5px 12px;border-radius:7px;cursor:pointer" onclick="despagarFatura('${faturaCartaoSel}')"><i class="ti ti-arrow-back-up"></i> Marcar fatura como não paga</button>
+    </div>`;
+  }
 
   if(catRows.length){
     html+=`<div class="fatura-section"><div class="fatura-section-title">Por categoria</div>
@@ -3553,9 +3628,21 @@ function renderFaturas(){
 function pagarFatura(cartaoId){
   const txs=state.transactions.filter(t=>t.cartaoId===cartaoId&&t.type==='despesa'&&t.status==='pendente'&&new Date(t.date+'T00:00:00').getMonth()===cm&&new Date(t.date+'T00:00:00').getFullYear()===cy);
   if(!txs.length){showToast('Sem pendências nesta fatura','green');return;}
-  txs.forEach(t=>t.status='pago');
+  const c=(state.cartoes||[]).find(x=>x.id===cartaoId);
+  const total=txs.reduce((s,t)=>s+t.amount,0);
+  const defaultAcc=c?c.contaDebitadoraId:null;
+  const label='Fatura do '+(c?c.nome:'cartão')+' · '+MONTHS[cm]+'/'+cy+' · '+txs.length+' lançamento(s)';
+  abrirPromptConta(txs.map(t=>t.id),'despesa',defaultAcc,label,total);
+}
+function despagarFatura(cartaoId){
+  const txs=state.transactions.filter(t=>t.cartaoId===cartaoId&&t.type==='despesa'&&t.status==='pago'&&new Date(t.date+'T00:00:00').getMonth()===cm&&new Date(t.date+'T00:00:00').getFullYear()===cy);
+  if(!txs.length){showToast('Nenhum lançamento pago nesta fatura','blue');return;}
+  const c=(state.cartoes||[]).find(x=>x.id===cartaoId);
+  const total=txs.reduce((s,t)=>s+t.amount,0);
+  if(!confirm('Marcar '+txs.length+' lançamento(s) da fatura do '+(c?c.nome:'cartão')+' ('+fmt(total)+') de volta como pendente?'))return;
+  txs.forEach(t=>t.status='pendente');
   save();renderFaturas();render();
-  showToast('✅ '+txs.length+' lançamento(s) marcados como pagos','green');
+  showToast('✅ Fatura revertida para pendente.','blue');
 }
 
 /* ── MEIO DE PAGAMENTO NO FORM ── */
@@ -4428,7 +4515,7 @@ function renderRelatorio(){
     <div style="display:flex;gap:6px;margin-left:auto">
       <button onclick="openForm('${relTipo}')" style="display:flex;align-items:center;gap:6px;padding:7px 13px;border-radius:8px;background:${relTipo==='despesa'?'var(--red)':'var(--green)'};border:none;color:#fff;font-size:13px;font-weight:600;cursor:pointer"><i class="ti ti-plus"></i> Nova ${relTipo==='despesa'?'Despesa':'Receita'}</button>
       <button onclick="exportRelatorio()" style="display:flex;align-items:center;gap:6px;padding:7px 13px;border-radius:8px;background:var(--blue-l);border:1px solid var(--blue);color:#1d4ed8;font-size:13px;font-weight:600;cursor:pointer"><i class="ti ti-download"></i> CSV</button>
-      <button onclick="diagnosticarParcelas()" style="display:flex;align-items:center;gap:6px;padding:7px 13px;border-radius:8px;background:#fef3c7;border:1px solid #f59e0b;color:#92400e;font-size:13px;font-weight:600;cursor:pointer"><i class="ti ti-stethoscope"></i> Diagnóstico</button>
+      <button onclick="diagnosticarParcelas()" style="display:flex;align-items:center;gap:6px;padding:7px 13px;border-radius:8px;background:#fef3c7;border:1px solid #f59e0b;color:#92400e;font-size:13px;font-weight:600;cursor:pointer"><i class="ti ti-stethoscope"></i> Diagnóstico Parcelas</button>
     </div>
   </div>
 
@@ -4476,7 +4563,11 @@ function relToggleCatOpen(cat){
 function relToggleStatus(id){
   const t=state.transactions.find(x=>x.id===id);
   if(!t)return;
-  t.status=t.status==='pago'?'pendente':'pago';
+  if(t.status!=='pago'){
+    markSt(id,'pago');
+    return;
+  }
+  t.status='pendente';
   save();renderRelatorio();renderCards();
 }
 function relDeleteTx(id){
