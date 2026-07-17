@@ -4566,7 +4566,7 @@ function renderRelatorio(){
           <span style="font-weight:600;color:var(--txt);font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0">${cat}</span>
         </div>
         <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;flex-wrap:wrap;justify-content:flex-end">
-          <span style="font-size:12px;color:var(--txt3);white-space:nowrap">${v.txs.length} lanç. · ${pct}%</span>
+          <span style="font-size:12px;color:var(--txt3);white-space:nowrap">${pct}%</span>
           ${v.pendente?`<span style="font-size:11px;color:var(--amber);background:var(--amber-l);padding:2px 7px;border-radius:10px;white-space:nowrap">⏳ ${fmt(v.pendente)}</span>`:''}
           <span style="font-weight:700;color:${accentClr};font-size:14px;white-space:nowrap">${fmt(tot)}</span>
         </div>
