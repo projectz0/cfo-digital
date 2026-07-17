@@ -2797,7 +2797,7 @@ function closeForm(){
     renderDayPanel(ds);
   }
 }
-function handleFormBg(e){if(e.target.id==='formWrap')closeForm();}
+function handleFormBg(e){/* clique fora não fecha mais — evita perder lançamento em digitação; use o X ou Cancelar */}
 
 function toggleInst(){
   const on=document.getElementById('fInst').checked;
@@ -3036,7 +3036,7 @@ function closeCatModal(){
   if(fVis){document.getElementById('fCat').innerHTML=getCats(fType).map(c=>'<option>'+c+'</option>').join('')}
   renderCatChips();renderCharts();renderList();
 }
-function handleCatModalBg(e){if(e.target.id==='catModal')closeCatModal()}
+function handleCatModalBg(e){/* clique fora não fecha mais — use o X */}
 function setCatTab(type){
   catTab=type;
   document.getElementById('ctbD').className=type==='despesa'?'bp':'';
