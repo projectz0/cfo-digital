@@ -843,9 +843,15 @@ label.btn-like:hover{background:var(--surf2)}
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px"><p class="f-title" style="margin-bottom:0" id="metaFormTitle">Nova Meta</p><button onclick="closeMetaForm()" style="background:none;border:none;font-size:22px;color:var(--txt3);cursor:pointer;padding:0 2px;line-height:1">&times;</button></div>
         <div class="f-grid">
           <div class="f-fld"><label>Nome da meta *</label><input type="text" id="metaName" placeholder="Ex: Viagem, Reserva de emergência, Carro..."></div>
-          <div class="f-fld"><label>Quanto quer guardar (R$) *</label><input type="number" id="metaTarget" min="0" step="0.01" placeholder="0,00"></div>
+          <div class="f-fld f-full"><label>Tipo de meta</label>
+            <div style="display:flex;gap:8px">
+              <button type="button" id="metaTypeSaving" class="meio-btn on" onclick="selectMetaType('saving')"><i class="ti ti-piggy-bank"></i> Economia (guardar até atingir)</button>
+              <button type="button" id="metaTypeSpending" class="meio-btn" onclick="selectMetaType('spending')"><i class="ti ti-alert-triangle"></i> Limite de gasto (não ultrapassar)</button>
+            </div>
+          </div>
+          <div class="f-fld"><label id="metaTargetLbl">Quanto quer guardar (R$) *</label><input type="number" id="metaTarget" min="0" step="0.01" placeholder="0,00"></div>
           <div class="f-fld f-full"><label>Conta vinculada <span style="font-size:11px;color:var(--txt3);font-weight:400">— o saldo desta conta é o progresso da meta (opcional)</span></label><select id="metaAccountId" onchange="updateMetaAccountUI()"><option value="">Sem conta vinculada (progresso manual)</option></select></div>
-          <div class="f-fld" id="metaCurrentWrap"><label>Valor já guardado (R$) <span style="font-size:11px;color:var(--txt3);font-weight:400">— quando não tem conta vinculada</span></label><input type="number" id="metaCurrent" min="0" step="0.01" placeholder="0,00" value="0"></div>
+          <div class="f-fld" id="metaCurrentWrap"><label id="metaCurrentLbl">Valor já guardado (R$) <span style="font-size:11px;color:var(--txt3);font-weight:400">— quando não tem conta vinculada</span></label><input type="number" id="metaCurrent" min="0" step="0.01" placeholder="0,00" value="0"></div>
           <div class="f-fld"><label>Prazo <span style="font-size:11px;color:var(--txt3)">(opcional)</span></label><input type="date" id="metaDeadline"></div>
           <div class="f-fld"><label>Cor</label><div id="metaColorPicker" class="color-picker-row"></div></div>
         </div>
@@ -1600,7 +1606,7 @@ function loadDemoData(){
 
   // Aplicar estado
   state={
-    transactions:txs,recorrentes,
+    transactions:txs,recurrentes:recorrentes,
     customCats:{receita:['Freelance'],despesa:['Vestuário','Eletrônicos','Suplementos','Streaming','Games','Internet','Viagens']},
     catColors:{},accounts,metas,cartoes
   };
@@ -1658,7 +1664,7 @@ function toggleListSort(field){
   else{listSort.field=field;listSort.dir='desc';}
   renderList();
 }
-let editId=null, editScope='single', fVis=false, fType='despesa';
+let editId=null, editScope='single', fVis=false, fType='despesa', editOrigAmount=null;
 let editGroupId=null, editRecId=null;
 let selectedIds=new Set(), selMode=false;
 let pieI=null, barI=null;
@@ -2568,7 +2574,7 @@ function renderList(){
     const stBtn=isPend
       ?'<button class="st-btn st-pend" onclick="markSt(\''+t.id+'\',\'pago\')" title="Clique para marcar como Pago"><i class="ti ti-clock" style="font-size:11px"></i>Pendente</button>'
       :'<button class="st-btn st-pago" onclick="markSt(\''+t.id+'\',\'pendente\')" title="Clique para marcar como Pendente"><i class="ti ti-check" style="font-size:11px"></i>Pago</button>';
-    return'<div class="tx'+(isPend?' pend':'')+(isSel?' selected':'')+'"><input class="tx-ck" type="checkbox"'+(isSel?' checked':'')+' onclick="toggleSel(\''+t.id+'\',this)"><div class="tx-av '+avCls+'"><i class="ti '+avIco+'"></i></div><div class="tx-body"><div class="tx-desc">'+t.description+instB+recB+terB+subB+meioB+'</div><div class="tx-meta">'+t.category+(t.subcategory?' · '+t.subcategory:'')+' · '+date+'</div></div><div class="tx-r"><div class="tx-amt '+amtCls+'">'+sign+' <span class="pv">'+fmt(t.amount)+'</span></div><div class="tx-acts">'+stBtn+'<button class="tx-edit bi" onclick="editTx(\''+t.id+'\')"><i class="ti ti-pencil"></i></button><button class="bi" onclick="duplicarTx(\''+t.id+'\')" title="Duplicar no próximo mês" style="background:var(--surf2);border-color:var(--brd2);color:var(--txt2)"><i class="ti ti-copy"></i></button><button class="tx-del bi" onclick="delTx(\''+t.id+'\')"><i class="ti ti-trash"></i></button></div></div></div>';
+    return'<div id="tx-'+t.id+'" class="tx'+(isPend?' pend':'')+(isSel?' selected':'')+'"><input class="tx-ck" type="checkbox"'+(isSel?' checked':'')+' onclick="toggleSel(\''+t.id+'\',this)"><div class="tx-av '+avCls+'"><i class="ti '+avIco+'"></i></div><div class="tx-body"><div class="tx-desc">'+t.description+instB+recB+terB+subB+meioB+'</div><div class="tx-meta">'+t.category+(t.subcategory?' · '+t.subcategory:'')+' · '+date+'</div></div><div class="tx-r"><div class="tx-amt '+amtCls+'">'+sign+' <span class="pv">'+fmt(t.amount)+'</span></div><div class="tx-acts">'+stBtn+'<button class="tx-edit bi" onclick="editTx(\''+t.id+'\')"><i class="ti ti-pencil"></i></button><button class="bi" onclick="duplicarTx(\''+t.id+'\')" title="Duplicar no próximo mês" style="background:var(--surf2);border-color:var(--brd2);color:var(--txt2)"><i class="ti ti-copy"></i></button><button class="tx-del bi" onclick="delTx(\''+t.id+'\')"><i class="ti ti-trash"></i></button></div></div></div>';
   }).join('');
 }
 
@@ -2726,6 +2732,7 @@ function _editGo(id,scope){
   editScope=scope;
   const t=state.transactions.find(x=>x.id===id);if(!t)return;
   editId=id;fType=t.type;fVis=true;
+  editOrigAmount=t.amount;
   // Guarda chaves para edição em lote (mais confiável que reler t depois)
   editGroupId=(scope==='all'&&t.installment)?t.installment.groupId:null;
   editRecId=(scope==='all-rec'&&t.recorrente)?t.recorrente:null;
@@ -2820,6 +2827,9 @@ function saveTx(){
     const carteira=state.accounts.find(a=>a.type==='Carteira'||a.name.toLowerCase().includes('carteira'));
     accountId=carteira?carteira.id:null;
   }
+  // Despesa de terceiro nunca debita conta própria — é acompanhada à parte em Terceiros,
+  // independente de como/onde o status "pago" foi definido.
+  if(debtor)accountId=null;
   const dataCompensacao=(meioPagamentoSel==='cheque'?document.getElementById('fCompensacao').value:null)||null;
   if(!desc||!amount||amount<=0||!date){alert('Preencha descricao, valor e data.');return}
 
@@ -2840,7 +2850,10 @@ function saveTx(){
         if(x.type===fType&&norm(x.description)===descNorm&&x.installment.total===total) ids.add(x.id);
       });
       const grupo=state.transactions.filter(x=>ids.has(x.id));
-      grupo.forEach(x=>{x.description=desc;x.category=cat;x.debtor=debtor;x.subcategory=subcategory;x.amount=amount;x.accountId=accountId;x.meioPagamento=meioPagamentoSel;x.cartaoId=cartaoId;x.dataCompensacao=dataCompensacao;});
+      // Só propaga o valor pra todas as parcelas se ele foi de fato alterado na edição —
+      // senão, editar só a categoria/descrição apagaria valores customizados por parcela.
+      const amountChanged=editOrigAmount!==null&&amount!==editOrigAmount;
+      grupo.forEach(x=>{x.description=desc;x.category=cat;x.debtor=debtor;x.subcategory=subcategory;if(amountChanged)x.amount=amount;x.accountId=accountId;x.meioPagamento=meioPagamentoSel;x.cartaoId=cartaoId;x.dataCompensacao=dataCompensacao;});
       const pagas=grupo.filter(x=>x.status==='pago').length;
       const pend=grupo.filter(x=>x.status==='pendente').length;
       editGroupId=null;
@@ -2852,7 +2865,8 @@ function saveTx(){
       if(recId){
         const rec=state.recurrentes.find(r=>r.id===recId);
         if(rec){rec.description=desc;rec.category=cat;rec.amount=amount;rec.debtor=debtor;rec.subcategory=subcategory;rec.dayOfMonth=parseInt(date.split('-')[2])||rec.dayOfMonth;}
-        const grupo=state.transactions.filter(x=>x.recorrente===recId);
+        // "Este e todos os futuros" — só altera a partir do mês editado, nunca o passado
+        const grupo=state.transactions.filter(x=>x.recorrente===recId&&x.date>=t.date);
         grupo.forEach(x=>{x.description=desc;x.category=cat;x.amount=amount;x.debtor=debtor;x.subcategory=subcategory;x.accountId=accountId;x.meioPagamento=meioPagamentoSel;x.cartaoId=cartaoId;x.dataCompensacao=dataCompensacao;});
         const pagas=grupo.filter(x=>x.status==='pago').length;
         const pend=grupo.filter(x=>x.status==='pendente').length;
@@ -2873,6 +2887,22 @@ function saveTx(){
       ensureRecurrentes(cm,cy);
       save();closeForm();render();
       showToast('Lançamento convertido para recorrente — próximos meses gerados','green');
+      return;
+    }
+    // Converter lançamento normal em parcelado
+    const isInst2=document.getElementById('fInst').checked;
+    if(isInst2&&!t.installment&&!t.recorrente){
+      const n=parseInt(document.getElementById('fInstN').value);
+      if(n<2||n>60){alert('Parcelas entre 2 e 60.');return}
+      const gid=uid(),pv=parseFloat((amount/n).toFixed(2)),base=new Date(date+'T00:00:00');
+      t.amount=pv;
+      t.installment={current:1,total:n,groupId:gid};
+      for(let i=1;i<n;i++){
+        const d=new Date(base);d.setMonth(d.getMonth()+i);
+        state.transactions.push({id:uid(),type:t.type,description:desc,category:cat,amount:pv,date:d.toISOString().split('T')[0],status:'pendente',debtor,subcategory,accountId,meioPagamento:meioPagamentoSel,cartaoId,dataCompensacao,installment:{current:i+1,total:n,groupId:gid},recorrente:null});
+      }
+      save();closeForm();render();
+      showToast('✅ Despesa convertida em '+n+'x — parcelas futuras geradas','green');
       return;
     }
     save();closeForm();render();return;
@@ -3842,7 +3872,16 @@ function delTxFromDay(id){
 const META_COLORS=['#10B981','#3B82F6','#F59E0B','#EF4444','#8B5CF6','#EC4899','#F97316','#0EA5E9','#14B8A6'];
 let editMetaId=null;
 let metaColorSel=META_COLORS[0];
+let metaTypeSel='saving';
 
+function selectMetaType(t){
+  metaTypeSel=t;
+  document.getElementById('metaTypeSaving').classList.toggle('on',t==='saving');
+  document.getElementById('metaTypeSpending').classList.toggle('on',t==='spending');
+  document.getElementById('metaTargetLbl').textContent=t==='spending'?'Qual o limite de gasto (R$) *':'Quanto quer guardar (R$) *';
+  const curLbl=document.getElementById('metaCurrentLbl');
+  curLbl.innerHTML=(t==='spending'?'Valor já gasto (R$)':'Valor já guardado (R$)')+' <span style="font-size:11px;color:var(--txt3);font-weight:400">— quando não tem conta vinculada</span>';
+}
 function openMetaForm(id=null){
   editMetaId=id;
   const m=id?state.metas.find(x=>x.id===id):null;
@@ -3853,6 +3892,7 @@ function openMetaForm(id=null){
   document.getElementById('metaCurrent').value=m?m.current||0:0;
   document.getElementById('metaDeadline').value=m?m.deadline||'':'';
   metaColorSel=m?m.color:META_COLORS[0];
+  selectMetaType(m?.type==='spending'?'spending':'saving');
   const as=document.getElementById('metaAccountId');
   as.innerHTML='<option value="">Sem conta vinculada (progresso manual)</option>'+
     state.accounts.map(a=>'<option value="'+a.id+'"'+(m&&m.accountId===a.id?' selected':'')+'>'+a.name+(a.type?' · '+a.type:'')+'</option>').join('');
@@ -3878,7 +3918,7 @@ function saveMeta(){
   if(!target){showToast('Informe o valor alvo','red');return;}
   const accountId=document.getElementById('metaAccountId').value||null;
   const meta={
-    id:editMetaId||uid(),name,target,accountId,
+    id:editMetaId||uid(),name,target,accountId,type:metaTypeSel,
     current:accountId?0:parseFloat(document.getElementById('metaCurrent').value)||0,
     deadline:document.getElementById('metaDeadline').value||null,
     color:metaColorSel,
@@ -4016,7 +4056,7 @@ function buildAlerts(){
   if(overdue.length){
     const first=overdue.sort((a,b)=>a.date.localeCompare(b.date))[0];
     const fd=new Date(first.date+'T00:00:00');
-    alerts.push({type:'danger',icon:'ti-alert-circle',text:overdue.length+' lançamento(s) em atraso ('+fmt(overdue.reduce((s,t)=>s+t.amount,0))+')',action:{page:'despesas',m:fd.getMonth(),y:fd.getFullYear(),ids:overdue.map(t=>t.id)}});
+    alerts.push({type:'danger',icon:'ti-alert-circle',text:overdue.length+' lançamento(s) em atraso ('+fmt(overdue.reduce((s,t)=>s+t.amount,0))+')',action:{page:first.type==='receita'?'receitas':'despesas',m:fd.getMonth(),y:fd.getFullYear(),ids:overdue.map(t=>t.id)}});
   }
   // due tomorrow
   const dueTomorrow=state.transactions.filter(t=>{
@@ -4034,7 +4074,7 @@ function buildAlerts(){
     const d=new Date(t.date+'T00:00:00');d.setHours(0,0,0,0);
     return d>tomorrow&&d<=in3;
   });
-  if(due3.length){alerts.push({type:'info',icon:'ti-calendar-event',text:due3.length+' vencimento(s) nos próximos 3 dias ('+fmt(due3.reduce((s,t)=>s+t.amount,0))+')',action:{page:'despesas',m:cm,y:cy,ids:due3.map(t=>t.id)}});}
+  if(due3.length){const firstDue3=due3.sort((a,b)=>a.date.localeCompare(b.date))[0];alerts.push({type:'info',icon:'ti-calendar-event',text:due3.length+' vencimento(s) nos próximos 3 dias ('+fmt(due3.reduce((s,t)=>s+t.amount,0))+')',action:{page:firstDue3.type==='receita'?'receitas':'despesas',m:cm,y:cy,ids:due3.map(t=>t.id)}});}
   // metas
   state.metas.forEach(m=>{
     const cur=getMetaProgress(m);
@@ -4201,8 +4241,8 @@ function saveTransfer(){
   }
   const status=document.getElementById('tfEfetivada').checked?'pago':'pendente';
   const pairId=uid();
-  const saida={id:editTransferId||uid(),type:'transferencia',description:desc,amount:valor,date:data,status,accountId:origemId,destAccountId:destinoId,linkedTransferId:pairId,direction:'saida',installment:null,recorrente:null,meioPagamento:null,cartaoId:null,dataCompensacao:null};
-  const entrada={id:pairId,type:'transferencia',description:desc,amount:valor,date:data,status,accountId:destinoId,destAccountId:origemId,linkedTransferId:saida.id,direction:'entrada',installment:null,recorrente:null,meioPagamento:null,cartaoId:null,dataCompensacao:null};
+  const saida={id:editTransferId||uid(),type:'transferencia',description:desc,amount:valor,date:data,status,accountId:origemId,destAccountId:destinoId,linkedTransferId:pairId,direction:'saida',installment:null,recorrente:null,meioPagamento:null,cartaoId:null,dataCompensacao:null,category:'Transferência',subcategory:null,debtor:null};
+  const entrada={id:pairId,type:'transferencia',description:desc,amount:valor,date:data,status,accountId:destinoId,destAccountId:origemId,linkedTransferId:saida.id,direction:'entrada',installment:null,recorrente:null,meioPagamento:null,cartaoId:null,dataCompensacao:null,category:'Transferência',subcategory:null,debtor:null};
   state.transactions.push(saida,entrada);
   save();closeTransferForm();render();
   showToast('Transferência registrada','green');
