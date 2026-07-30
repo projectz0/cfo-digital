@@ -711,6 +711,7 @@ label.btn-like:hover{background:var(--surf2)}
         <label class="sb-sub-item" style="cursor:pointer"><i class="ti ti-file-import"></i>Importar OFX/OFC<input type="file" accept=".ofx,.ofc,.qfx,.txt" onchange="openOfxImport(event)" style="display:none"></label>
         <button id="btnRecuperar" class="sb-sub-item" onclick="recuperarDadosLocais()" style="display:none;color:#EF9F27"><i class="ti ti-database-import" style="color:#EF9F27"></i>Recuperar dados locais</button>
         <button class="sb-sub-item" onclick="abrirHistoricoVersoes()"><i class="ti ti-history"></i>Versões anteriores</button>
+        <button class="sb-sub-item" id="btnRedefinirSenha" onclick="redefinirSenha()" style="display:none"><i class="ti ti-key"></i>Redefinir senha</button>
         <button class="sb-sub-item" id="btnZerar" onclick="zerarConta()" style="display:none;color:var(--red-d)"><i class="ti ti-trash-x" style="color:var(--red-d)"></i>Zerar lançamentos</button>
       </div>
     </div>
@@ -1293,6 +1294,19 @@ async function authSubmit(){
   }
 }
 
+async function redefinirSenha(){
+  if(!currentUser)return;
+  const pass=prompt('Digite a nova senha (mínimo 6 caracteres):');
+  if(pass===null)return; // cancelado
+  if(pass.length<6){showToast('Senha deve ter no mínimo 6 caracteres','red');return;}
+  const passConf=prompt('Confirme a nova senha:');
+  if(passConf===null)return;
+  if(pass!==passConf){showToast('As senhas não conferem','red');return;}
+  const{error}=await sb.auth.updateUser({password:pass});
+  if(error){showToast('Erro ao redefinir senha: '+error.message,'red');return;}
+  showToast('✅ Senha redefinida com sucesso!','green');
+}
+
 async function zerarConta(){
   if(!currentUser)return;
   const conf=prompt('Isso vai apagar PERMANENTEMENTE todos os lançamentos, contas, cartões, metas, recorrentes e notas desta conta. Não pode ser desfeito.\n\nDigite APAGAR para confirmar:');
@@ -1314,6 +1328,7 @@ async function logout(){
   document.getElementById('authOverlay').style.display='flex';
   document.getElementById('userChip').style.display='none';
   document.getElementById('btnLogout').style.display='none';
+  document.getElementById('btnRedefinirSenha').style.display='none';
   document.getElementById('btnZerar').style.display='none';
   document.getElementById('btnRecuperar').style.display='none';
   document.getElementById('authEmail').value='';
@@ -1472,6 +1487,7 @@ function showApp(user){
   document.getElementById('userChip').style.display='flex';
   document.getElementById('userEmail').textContent=user.email;
   document.getElementById('btnLogout').style.display='flex';
+  document.getElementById('btnRedefinirSenha').style.display='flex';
   document.getElementById('btnZerar').style.display='flex';
   // Mostra botão de recuperar se tiver dados locais
   const localRaw=localStorage.getItem(KEY)||localStorage.getItem('cf_v3')||localStorage.getItem('cf_data_v2');
@@ -1726,6 +1742,8 @@ async function init(){
       document.getElementById('authOverlay').style.display='flex';
       document.getElementById('userChip').style.display='none';
       document.getElementById('btnLogout').style.display='none';
+      document.getElementById('btnRedefinirSenha').style.display='none';
+      document.getElementById('btnZerar').style.display='none';
       document.getElementById('btnRecuperar').style.display='none';
     }
   });
