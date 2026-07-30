@@ -706,6 +706,7 @@ label.btn-like:hover{background:var(--surf2)}
       <label class="btn-like" title="Importar extrato OFX/OFC do banco" style="background:var(--blue-l);color:#1d4ed8;border-color:var(--blue)"><i class="ti ti-file-import"></i><input type="file" accept=".ofx,.ofc,.qfx,.txt" onchange="openOfxImport(event)" style="display:none"></label>
       <button id="btnRecuperar" onclick="recuperarDadosLocais()" title="Recuperar dados locais" style="display:none;background:#EF9F27;color:#fff;border-color:#EF9F27"><i class="ti ti-database-import"></i></button>
       <button onclick="abrirHistoricoVersoes()" title="Restaurar versão anterior"><i class="ti ti-history"></i></button>
+      <button onclick="zerarConta()" id="btnZerar" style="display:none;background:var(--red-l);color:var(--red-d);border-color:var(--red)" title="Apagar todos os dados da conta"><i class="ti ti-trash-x"></i></button>
       <button onclick="logout()" id="btnLogout" style="display:none" title="Sair"><i class="ti ti-logout"></i></button>
     </div>
   </div>
@@ -1215,6 +1216,7 @@ function switchAuthTab(mode){
 async function demoMode(){
   // Sair do Supabase para não contaminar conta real
   currentUser=null;
+  demoActive=true;
   try{await sb.auth.signOut();}catch(e){}
   // Limpar qualquer dado anterior e carregar base demo
   state={transactions:[],recurrentes:[],customCats:{receita:[],despesa:[]},catColors:{},accounts:[],metas:[],cartoes:[],notas:[]};
@@ -1245,13 +1247,28 @@ async function authSubmit(){
   }
 }
 
+async function zerarConta(){
+  if(!currentUser)return;
+  const conf=prompt('Isso vai apagar PERMANENTEMENTE todos os lançamentos, contas, cartões, metas, recorrentes e notas desta conta. Não pode ser desfeito.\n\nDigite APAGAR para confirmar:');
+  if(conf!=='APAGAR'){showToast('Operação cancelada','red');return;}
+  state={transactions:[],recurrentes:[],customCats:{receita:[],despesa:[]},catColors:{},accounts:[],metas:[],cartoes:[],notas:[]};
+  localStorage.removeItem(KEY);
+  lastKnownUpdatedAt=null; // pula checagem de conflito — é uma sobrescrita intencional
+  await saveToCloud();
+  ensureRecurrentes(cm,cy);
+  render();
+  showToast('✅ Conta zerada com sucesso.','green');
+}
+
 async function logout(){
   await sb.auth.signOut();
   currentUser=null;
+  demoActive=false;
   state={transactions:[],recurrentes:[],customCats:{receita:[],despesa:[]},catColors:{},accounts:[],metas:[],cartoes:[],notas:[]};
   document.getElementById('authOverlay').style.display='flex';
   document.getElementById('userChip').style.display='none';
   document.getElementById('btnLogout').style.display='none';
+  document.getElementById('btnZerar').style.display='none';
   document.getElementById('btnRecuperar').style.display='none';
   document.getElementById('authEmail').value='';
   document.getElementById('authPass').value='';
@@ -1404,10 +1421,12 @@ async function recuperarDadosLocais(){
 
 function showApp(user){
   currentUser=user;
+  demoActive=false;
   document.getElementById('authOverlay').style.display='none';
   document.getElementById('userChip').style.display='flex';
   document.getElementById('userEmail').textContent=user.email;
   document.getElementById('btnLogout').style.display='flex';
+  document.getElementById('btnZerar').style.display='flex';
   // Mostra botão de recuperar se tiver dados locais
   const localRaw=localStorage.getItem(KEY)||localStorage.getItem('cf_v3')||localStorage.getItem('cf_data_v2');
   if(localRaw){
@@ -1671,6 +1690,7 @@ const MONTHS=['Janeiro','Fevereiro','Marco','Abril','Maio','Junho','Julho','Agos
 const KEY='cf_v4';
 
 let state={transactions:[],recurrentes:[],customCats:{receita:[],despesa:[]},catColors:{},accounts:[],metas:[],cartoes:[],notas:[]};
+let demoActive=false;
 let cm=new Date().getMonth(), cy=new Date().getFullYear();
 let view={tab:'todos',cat:'',status:'all',search:'',subcat:'',cartao:''};
 let listSort={field:'date',dir:'desc'};
@@ -1823,6 +1843,7 @@ function pushLocalHistory(){
   }catch(e){/* localStorage cheio ou indisponível — não bloqueia o save principal */}
 }
 function save(){
+  if(demoActive)return; // dados de demonstração nunca tocam o storage real nem a nuvem
   try{localStorage.setItem(KEY,JSON.stringify(state))}catch(e){}
   pushLocalHistory();
   return saveToCloud(); // enfileirado, com retry e detecção de conflito
