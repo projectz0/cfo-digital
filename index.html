@@ -126,6 +126,9 @@ body.privacy .pv{filter:blur(8px);user-select:none;pointer-events:none}
 .mb-hamb:hover{background:var(--surf2);box-shadow:none}
 .mb-title{font-size:15px;font-weight:800;color:var(--txt);letter-spacing:-.02em;flex:1}
 .mb-month{font-size:12px;color:var(--txt2);font-weight:600;white-space:nowrap}
+.mb-month-nav{display:flex;align-items:center;gap:3px;flex-shrink:0}
+.mb-mbtn{padding:4px 6px;background:none;border:1px solid var(--brd2);border-radius:6px;color:var(--txt2);font-size:12px;line-height:1}
+.mb-mbtn:hover{background:var(--surf2);box-shadow:none}
 .sb-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:299}
 
 /* LAYOUT */
@@ -641,7 +644,11 @@ label.btn-like:hover{background:var(--surf2)}
   <button class="mb-hamb" onclick="toggleSidebar()"><i class="ti ti-menu-2"></i></button>
   <span class="mb-title" id="mbTitle"><i class="ti ti-chart-pie" style="color:var(--green)"></i> CFO Digital</span>
   <button id="mbHome" onclick="setPage('painel')" style="display:none;background:none;border:1px solid var(--brd2);border-radius:7px;padding:5px 9px;color:var(--txt2);font-size:13px;gap:4px;align-items:center" title="Painel Geral"><i class="ti ti-home"></i></button>
-  <span class="mb-month" id="mobileMonthLabel"></span>
+  <div class="mb-month-nav">
+    <button class="mb-mbtn" onclick="prevMonth()" title="Mês anterior"><i class="ti ti-chevron-left"></i></button>
+    <span class="mb-month" id="mobileMonthLabel"></span>
+    <button class="mb-mbtn" onclick="nextMonth()" title="Próximo mês"><i class="ti ti-chevron-right"></i></button>
+  </div>
 </div>
 
 <!-- SIDEBAR OVERLAY (mobile) -->
@@ -1368,7 +1375,7 @@ function showToast(msg,type='green'){
   t.style.cssText=`position:fixed;bottom:24px;left:50%;transform:translateX(-50%);
     background:${type==='green'?'#1D9E75':type==='red'?'#E24B4A':'#185FA5'};
     color:#fff;padding:10px 20px;border-radius:10px;font-weight:600;font-size:14px;
-    z-index:9999;box-shadow:0 4px 16px rgba(0,0,0,.18);opacity:1;transition:opacity .4s`;
+    z-index:9999;box-shadow:0 4px 16px rgba(0,0,0,.18);opacity:1;transition:opacity .4s;pointer-events:none`;
   clearTimeout(t._to);
   t._to=setTimeout(()=>t.style.opacity='0',3000);
 }
@@ -1838,8 +1845,8 @@ function load(){
 }
 
 /* ── MONTH NAV ── */
-function prevMonth(){cm--;if(cm<0){cm=11;cy--}clearSel();ensureRecurrentes(cm,cy);render()}
-function nextMonth(){cm++;if(cm>11){cm=0;cy++}clearSel();ensureRecurrentes(cm,cy);render()}
+function prevMonth(){cm--;if(cm<0){cm=11;cy--}clearSel();ensureRecurrentes(cm,cy);relMes=cm;relAno=cy;render()}
+function nextMonth(){cm++;if(cm>11){cm=0;cy++}clearSel();ensureRecurrentes(cm,cy);relMes=cm;relAno=cy;render()}
 
 function getMonth(){
   return state.transactions.filter(t=>{
@@ -2113,7 +2120,7 @@ function renderCards(){
   // Fatura cards foram movidos para a página Contas & Cartões
   document.getElementById('cards').innerHTML=defs.map(d=>{
     const needsSign=['Saldo nas Contas','Saldo Projetado'].includes(d.l);
-    return'<div class="card '+d.cls+'" onclick="cardClick(\''+d.page+'\',\''+d.st+'\')" style="cursor:'+(d.page?'pointer':'default')+'"><p class="c-lbl">'+d.l+'</p><p class="c-val pv">'+(needsSign?fmtS(d.v):fmt(d.v))+'</p><p class="c-sub">'+d.sub+'</p></div>';
+    return'<div class="card '+d.cls+'" '+(d.page?'onclick="cardClick(\''+d.page+'\',\''+d.st+'\')"':'')+' style="cursor:'+(d.page?'pointer':'default')+'"><p class="c-lbl">'+d.l+'</p><p class="c-val pv">'+(needsSign?fmtS(d.v):fmt(d.v))+'</p><p class="c-sub">'+d.sub+'</p></div>';
   }).join('');
 }
 
@@ -4172,7 +4179,7 @@ function goAlertAction(idx){
     },100);
     return;
   }
-  if(ac.m!==undefined&&ac.y!==undefined){cm=ac.m;cy=ac.y;}
+  if(ac.m!==undefined&&ac.y!==undefined){cm=ac.m;cy=ac.y;relMes=cm;relAno=cy;}
   setPage(ac.page||'despesas');
   if(ac.ids&&ac.ids.length){
     setTimeout(()=>{
@@ -4539,16 +4546,16 @@ function renderRelatorio(){
       const statusBadge=isPend
         ?`<span onclick="relToggleStatus('${t.id}')" title="Clique para marcar como pago" style="cursor:pointer;display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:700;padding:3px 9px;border-radius:20px;background:var(--amber-l);color:var(--amber);border:1px solid rgba(245,158,11,.35)"><i class="ti ti-clock" style="font-size:11px"></i>Pendente</span>`
         :`<span onclick="relToggleStatus('${t.id}')" title="Clique para marcar como pendente" style="cursor:pointer;display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:700;padding:3px 9px;border-radius:20px;background:var(--green-l);color:var(--green-d);border:1px solid rgba(16,185,129,.35)"><i class="ti ti-check" style="font-size:11px"></i>Pago</span>`;
-      return`<div style="display:grid;grid-template-columns:80px 1fr auto;gap:8px;align-items:center;padding:9px 14px 9px 36px;border-top:1px solid var(--brd);background:var(--surf2)">
-        <div>
+      return`<div style="display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px;padding:9px 14px 9px 36px;border-top:1px solid var(--brd);background:var(--surf2)">
+        <div style="flex:0 0 80px;min-width:0">
           <div style="font-size:12px;font-weight:600;color:var(--txt)">${dStr}</div>
-          ${acc?`<div style="font-size:11px;color:var(--txt3)">${acc.name}</div>`:''}
+          ${acc?`<div style="font-size:11px;color:var(--txt3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${acc.name}</div>`:''}
         </div>
-        <div>
-          <div style="font-size:13px;color:var(--txt)">${t.description||'—'}</div>
-          ${t.subcategory?`<div style="font-size:11px;color:var(--txt3)">${t.subcategory}</div>`:''}
+        <div style="flex:1;min-width:100px">
+          <div style="font-size:13px;color:var(--txt);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${t.description||'—'}</div>
+          ${t.subcategory?`<div style="font-size:11px;color:var(--txt3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${t.subcategory}</div>`:''}
         </div>
-        <div style="display:flex;align-items:center;gap:8px;flex-shrink:0">
+        <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;margin-left:auto">
           <span style="font-size:13px;font-weight:700;color:${isPend?'var(--amber)':accentClr}">${fmt(t.amount)}</span>
           ${statusBadge}
           <button onclick="editTx('${t.id}')" title="Editar" style="background:none;border:none;color:var(--txt3);cursor:pointer;font-size:15px;padding:3px 5px"><i class="ti ti-pencil"></i></button>
