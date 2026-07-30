@@ -628,16 +628,19 @@ label.btn-like:hover{background:var(--surf2)}
   <div class="auth-box">
     <div class="auth-logo"><i class="ti ti-chart-pie"></i>CFO Digital</div>
     <p style="font-size:12px;color:var(--txt3);margin:-20px 0 22px;line-height:1.4">Transforme seus números em decisões inteligentes.</p>
-    <div class="auth-tabs">
+    <div class="auth-tabs" id="authTabs">
       <button class="auth-tab on" id="tabLogin" onclick="switchAuthTab('login')">Entrar</button>
       <button class="auth-tab" id="tabRegister" onclick="switchAuthTab('register')">Criar conta</button>
     </div>
-    <div class="auth-fld"><label>E-mail</label><input type="email" id="authEmail" placeholder="seu@email.com" onkeydown="if(event.key==='Enter')authSubmit()"></div>
-    <div class="auth-fld"><label>Senha</label><input type="password" id="authPass" placeholder="••••••••" onkeydown="if(event.key==='Enter')authSubmit()"></div>
-    <div class="auth-fld" id="authPassConfWrap" style="display:none"><label>Confirmar senha</label><input type="password" id="authPassConf" placeholder="••••••••" onkeydown="if(event.key==='Enter')authSubmit()"></div>
+    <p id="authResetHint" style="display:none;font-size:12px;color:var(--txt2);margin:0 0 16px;line-height:1.4">Informe seu e-mail e enviaremos um link para redefinir sua senha.</p>
+    <div class="auth-fld" id="authEmailWrap"><label>E-mail</label><input type="email" id="authEmail" placeholder="seu@email.com" onkeydown="if(event.key==='Enter')authSubmit()"></div>
+    <div class="auth-fld" id="authPassWrap"><label id="authPassLbl">Senha</label><input type="password" id="authPass" placeholder="••••••••" onkeydown="if(event.key==='Enter')authSubmit()"></div>
+    <div style="text-align:right;margin:-10px 0 14px" id="authForgotWrap"><button type="button" onclick="switchAuthTab('reset')" style="background:none;border:none;color:var(--green-d);font-size:12px;font-weight:600;cursor:pointer;padding:0">Esqueci minha senha</button></div>
+    <div class="auth-fld" id="authPassConfWrap" style="display:none"><label id="authPassConfLbl">Confirmar senha</label><input type="password" id="authPassConf" placeholder="••••••••" onkeydown="if(event.key==='Enter')authSubmit()"></div>
     <button class="auth-btn" id="authBtn" onclick="authSubmit()"><i class="ti ti-login"></i><span id="authBtnLbl">Entrar</span></button>
     <div class="auth-err" id="authErr"></div>
     <div class="auth-ok" id="authOk"></div>
+    <div style="text-align:center;margin-top:10px;display:none" id="authBackWrap"><button type="button" onclick="switchAuthTab('login')" style="background:none;border:none;color:var(--txt3);font-size:12px;cursor:pointer;padding:0">← Voltar para o login</button></div>
     <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--brd)">
       <button onclick="demoMode()" style="width:100%;padding:11px;background:linear-gradient(135deg,#8B5CF6,#6D28D9);color:#fff;border:none;border-radius:var(--r-sm);font-size:14px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;transition:opacity .12s" onmouseover="this.style.opacity='.88'" onmouseout="this.style.opacity='1'">
         <i class="ti ti-rocket"></i> Experimentar sem cadastro (Modo Demo)
@@ -1206,12 +1209,26 @@ let saveRetryTimer=null;
 
 /* ── AUTH UI ── */
 let authMode='login';
+let awaitingNewPassword=false;
 function switchAuthTab(mode){
   authMode=mode;
   document.getElementById('tabLogin').classList.toggle('on',mode==='login');
   document.getElementById('tabRegister').classList.toggle('on',mode==='register');
-  document.getElementById('authPassConfWrap').style.display=mode==='register'?'block':'none';
-  document.getElementById('authBtnLbl').textContent=mode==='login'?'Entrar':'Criar conta';
+  document.getElementById('authTabs').style.display=(mode==='reset'||mode==='newpass')?'none':'flex';
+  document.getElementById('authResetHint').style.display=mode==='reset'?'block':'none';
+  document.getElementById('authEmailWrap').style.display=mode==='newpass'?'none':'block';
+  document.getElementById('authPassWrap').style.display=mode==='reset'?'none':'block';
+  document.getElementById('authPassLbl').textContent=mode==='newpass'?'Nova senha':'Senha';
+  document.getElementById('authPassConfWrap').style.display=(mode==='register'||mode==='newpass')?'block':'none';
+  document.getElementById('authPassConfLbl').textContent=mode==='newpass'?'Confirmar nova senha':'Confirmar senha';
+  document.getElementById('authForgotWrap').style.display=mode==='login'?'block':'none';
+  document.getElementById('authBackWrap').style.display=mode==='reset'?'block':'none';
+  const lbls={login:'Entrar',register:'Criar conta',reset:'Enviar link de redefinição',newpass:'Salvar nova senha'};
+  document.getElementById('authBtnLbl').textContent=lbls[mode]||'Entrar';
+  if(mode==='reset'||mode==='newpass'){
+    document.getElementById('authPass').value='';
+    document.getElementById('authPassConf').value='';
+  }
   document.getElementById('authErr').textContent='';
   document.getElementById('authOk').textContent='';
 }
@@ -1236,6 +1253,32 @@ async function authSubmit(){
   const okEl=document.getElementById('authOk');
   const btn=document.getElementById('authBtn');
   errEl.textContent='';okEl.textContent='';
+
+  if(authMode==='reset'){
+    if(!email){errEl.textContent='Informe seu e-mail.';return}
+    btn.disabled=true;
+    const{error}=await sb.auth.resetPasswordForEmail(email,{redirectTo:location.origin+location.pathname});
+    btn.disabled=false;
+    if(error){errEl.textContent=error.message;return}
+    okEl.textContent='Link enviado! Verifique seu e-mail para redefinir a senha.';
+    return;
+  }
+
+  if(authMode==='newpass'){
+    if(!pass||pass!==passConf){errEl.textContent='Preencha a nova senha e a confirmação iguais.';return}
+    if(pass.length<6){errEl.textContent='Senha deve ter no minimo 6 caracteres.';return}
+    btn.disabled=true;
+    const{data,error}=await sb.auth.updateUser({password:pass});
+    btn.disabled=false;
+    if(error){errEl.textContent=error.message;return}
+    awaitingNewPassword=false;
+    okEl.textContent='Senha atualizada!';
+    document.getElementById('authOverlay').style.display='none';
+    switchAuthTab('login');
+    if(data?.user)await loadAndRender(data.user);
+    return;
+  }
+
   if(!email||!pass){errEl.textContent='Preencha e-mail e senha.';return}
   if(authMode==='register'&&pass!==passConf){errEl.textContent='Senhas nao conferem.';return}
   if(pass.length<6){errEl.textContent='Senha deve ter no minimo 6 caracteres.';return}
@@ -1666,9 +1709,16 @@ async function init(){
     document.getElementById('authOverlay').style.display='flex';
   }
 
-  // Só escuta SIGNED_IN e SIGNED_OUT, ignora TOKEN_REFRESHED
+  // Só escuta SIGNED_IN, SIGNED_OUT e PASSWORD_RECOVERY, ignora TOKEN_REFRESHED
   sb.auth.onAuthStateChange(async(event,session)=>{
+    if(event==='PASSWORD_RECOVERY'){
+      awaitingNewPassword=true;
+      document.getElementById('authOverlay').style.display='flex';
+      switchAuthTab('newpass');
+      return;
+    }
     if(event==='SIGNED_IN'&&session?.user){
+      if(awaitingNewPassword)return; // aguardando definir a nova senha antes de carregar dados
       await loadAndRender(session.user);
     }else if(event==='SIGNED_OUT'){
       currentUser=null;
