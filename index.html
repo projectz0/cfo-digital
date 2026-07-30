@@ -2791,6 +2791,7 @@ function openForm(type){
   document.getElementById('recLbl').style.display='flex';
   document.getElementById('recLbl').classList.remove('disabled');
   document.getElementById('fDebtorWrap').style.display=type==='despesa'?'':'none';
+  document.getElementById('fDesc').placeholder=type==='receita'?'Ex: Salário, Freelance...':'Ex: Conta de luz, Mercado...';
   document.getElementById('fCat').innerHTML=getCats(type).map(c=>'<option>'+c+'</option>').join('');
   const today=new Date(),d=new Date(cy,cm,Math.min(today.getDate(),new Date(cy,cm+1,0).getDate()));
   document.getElementById('fDate').value=d.toISOString().split('T')[0];
