@@ -700,15 +700,18 @@ label.btn-like:hover{background:var(--surf2)}
   <div class="sb-foot">
     <div id="syncIndicator" class="sync-indicator" style="display:none"></div>
     <div class="sb-user" id="userChip" style="display:none"><i class="ti ti-user-circle"></i><span id="userEmail"></span></div>
-    <div class="sb-foot-btns">
-      <button onclick="exportData()" title="Exportar"><i class="ti ti-download"></i></button>
-      <label class="btn-like" title="Importar backup JSON"><i class="ti ti-upload"></i><input type="file" accept=".json" onchange="importData(event)" style="display:none"></label>
-      <label class="btn-like" title="Importar extrato OFX/OFC do banco" style="background:var(--blue-l);color:#1d4ed8;border-color:var(--blue)"><i class="ti ti-file-import"></i><input type="file" accept=".ofx,.ofc,.qfx,.txt" onchange="openOfxImport(event)" style="display:none"></label>
-      <button id="btnRecuperar" onclick="recuperarDadosLocais()" title="Recuperar dados locais" style="display:none;background:#EF9F27;color:#fff;border-color:#EF9F27"><i class="ti ti-database-import"></i></button>
-      <button onclick="abrirHistoricoVersoes()" title="Restaurar versão anterior"><i class="ti ti-history"></i></button>
-      <button onclick="zerarConta()" id="btnZerar" style="display:none;background:var(--red-l);color:var(--red-d);border-color:var(--red)" title="Apagar todos os dados da conta"><i class="ti ti-trash-x"></i></button>
-      <button onclick="logout()" id="btnLogout" style="display:none" title="Sair"><i class="ti ti-logout"></i></button>
+    <div>
+      <button class="sb-item" id="sb-ferramentas-group" onclick="toggleFerramentasGroup()"><i class="ti ti-tools"></i>Ferramentas<i class="ti ti-chevron-right sb-arrow"></i></button>
+      <div class="sb-subnav" id="sb-ferramentas-sub">
+        <button class="sb-sub-item" onclick="exportData()"><i class="ti ti-download"></i>Exportar dados</button>
+        <label class="sb-sub-item" style="cursor:pointer"><i class="ti ti-upload"></i>Importar backup<input type="file" accept=".json" onchange="importData(event)" style="display:none"></label>
+        <label class="sb-sub-item" style="cursor:pointer"><i class="ti ti-file-import"></i>Importar OFX/OFC<input type="file" accept=".ofx,.ofc,.qfx,.txt" onchange="openOfxImport(event)" style="display:none"></label>
+        <button id="btnRecuperar" class="sb-sub-item" onclick="recuperarDadosLocais()" style="display:none;color:#EF9F27"><i class="ti ti-database-import" style="color:#EF9F27"></i>Recuperar dados locais</button>
+        <button class="sb-sub-item" onclick="abrirHistoricoVersoes()"><i class="ti ti-history"></i>Versões anteriores</button>
+        <button class="sb-sub-item" id="btnZerar" onclick="zerarConta()" style="display:none;color:var(--red-d)"><i class="ti ti-trash-x" style="color:var(--red-d)"></i>Zerar lançamentos</button>
+      </div>
     </div>
+    <button class="sb-item" onclick="logout()" id="btnLogout" style="display:none"><i class="ti ti-logout"></i>Sair</button>
   </div>
 </nav>
 
@@ -1728,6 +1731,14 @@ function toggleDespesasGroup(forceOpen){
   sub.classList.toggle('open',shouldOpen);
   // Se abriu clicando no pai (não via setPage), navega para Despesas
   if(shouldOpen&&forceOpen===undefined) setPage('despesas');
+}
+
+function toggleFerramentasGroup(){
+  const grp=document.getElementById('sb-ferramentas-group');
+  const sub=document.getElementById('sb-ferramentas-sub');
+  const shouldOpen=!sub.classList.contains('open');
+  grp.classList.toggle('expanded',shouldOpen);
+  sub.classList.toggle('open',shouldOpen);
 }
 
 /* ── PAGE ROUTING ── */
