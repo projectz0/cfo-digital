@@ -1,0 +1,15 @@
+{
+  "name": "CFO Digital",
+  "short_name": "CFO Digital",
+  "description": "Controle financeiro pessoal — receitas, despesas, cartões, metas e relatórios.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#F8FAFC",
+  "theme_color": "#10B981",
+  "orientation": "portrait-primary",
+  "icons": [
+    { "src": "icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "icons/icon-maskable.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "maskable" }
+  ]
+}

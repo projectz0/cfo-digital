@@ -1,3 +1,7 @@
 *
 !.gitignore
 !index.html
+!manifest.json
+!sw.js
+!icons/
+!icons/*
