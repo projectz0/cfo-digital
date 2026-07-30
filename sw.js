@@ -1,5 +1,8 @@
-const CACHE_NAME = 'cfo-digital-v1';
-const APP_SHELL = ['./', './index.html', './manifest.json', './icons/icon.svg', './icons/icon-maskable.svg'];
+const CACHE_NAME = 'cfo-digital-v2';
+const APP_SHELL = ['./', './index.html', './manifest.json',
+  './icons/icon.svg', './icons/icon-maskable.svg',
+  './icons/icon-32.png', './icons/icon-180.png', './icons/icon-192.png', './icons/icon-512.png',
+  './icons/icon-192-maskable.png', './icons/icon-512-maskable.png'];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
