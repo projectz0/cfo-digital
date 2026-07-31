@@ -2935,9 +2935,12 @@ function _editGo(id,scope){
     document.getElementById('instLbl').style.display='none';
     document.getElementById('recLbl').style.display='none';
     document.getElementById('fNotice').style.display='block';
-    document.getElementById('fNotice').textContent=scope==='all'
+    let noticeTxt=scope==='all'
       ?'Editando TODAS as '+t.installment.total+' parcelas.'
       :'Editando so a parcela '+t.installment.current+'/'+t.installment.total+'.';
+    const faltamN=contarParcelasFuturasFaltantes(t);
+    if(faltamN>0)noticeTxt+=' ⚠️ Faltam '+faltamN+' parcela(s) futura(s) desse grupo — serão geradas automaticamente ao salvar.';
+    document.getElementById('fNotice').textContent=noticeTxt;
   }else if(t.recorrente){
     document.getElementById('instLbl').style.display='none';
     document.getElementById('recLbl').style.display='none';
@@ -2978,6 +2981,34 @@ function toggleRecCk(){
   if(on){document.getElementById('fInst').checked=false;document.getElementById('instRow').style.display='none'}
 }
 
+// Detecta/gera parcelas futuras que faltam no MESMO groupId (nunca por descrição — evita juntar grupos diferentes)
+function _parcelasFuturasFaltantesNums(t){
+  if(!t.installment||!t.installment.groupId)return[];
+  const{groupId,total,current}=t.installment;
+  const existentes=new Set(state.transactions.filter(x=>x.installment&&x.installment.groupId===groupId).map(x=>x.installment.current));
+  const faltando=[];
+  for(let n=current+1;n<=total;n++){if(!existentes.has(n))faltando.push(n);}
+  return faltando;
+}
+function contarParcelasFuturasFaltantes(t){return _parcelasFuturasFaltantesNums(t).length;}
+function gerarParcelasFuturasFaltantes(t){
+  const faltando=_parcelasFuturasFaltantesNums(t);
+  if(!faltando.length)return 0;
+  const base=new Date(t.date+'T00:00:00');
+  const{groupId,total,current}=t.installment;
+  faltando.forEach(n=>{
+    const d=new Date(base);d.setMonth(d.getMonth()+(n-current));
+    state.transactions.push({
+      id:uid(),type:t.type,description:t.description,category:t.category,
+      amount:t.amount,date:d.toISOString().split('T')[0],status:'pendente',
+      debtor:t.debtor,subcategory:t.subcategory,accountId:t.accountId,
+      meioPagamento:t.meioPagamento,cartaoId:t.cartaoId,dataCompensacao:t.dataCompensacao,
+      installment:{current:n,total,groupId},recorrente:null
+    });
+  });
+  return faltando.length;
+}
+
 function saveTx(){
   const desc=document.getElementById('fDesc').value.trim();
   const amount=parseFloat(document.getElementById('fAmt').value);
@@ -3004,18 +3035,13 @@ function saveTx(){
     const t=state.transactions.find(x=>x.id===editId);
     if(!t){closeForm();return}
     if(editScope==='all'&&t.installment){
-      // Normaliza texto para comparar sem acento/maiúscula
-      const norm=s=>(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().trim();
-      const descNorm=norm(t.description);
-      const total=t.installment.total;
-      // Coleta IDs por groupId E por descrição+total (merge garante pegar TODOS mesmo com dados antigos)
+      // Agrupa SÓ pelo groupId exato — nunca por descrição+total, que pode juntar
+      // séries de parcelas diferentes e não-relacionadas que coincidem de nome.
       const ids=new Set();
       ids.add(t.id); // sempre inclui o atual
-      state.transactions.forEach(x=>{
-        if(!x.installment) return;
-        if(editGroupId&&x.installment.groupId===editGroupId) ids.add(x.id);
-        if(x.type===fType&&norm(x.description)===descNorm&&x.installment.total===total) ids.add(x.id);
-      });
+      if(editGroupId){
+        state.transactions.forEach(x=>{if(x.installment&&x.installment.groupId===editGroupId)ids.add(x.id);});
+      }
       const grupo=state.transactions.filter(x=>ids.has(x.id));
       // Só propaga o valor pra todas as parcelas se ele foi de fato alterado na edição —
       // senão, editar só a categoria/descrição apagaria valores customizados por parcela.
@@ -3023,9 +3049,10 @@ function saveTx(){
       grupo.forEach(x=>{x.description=desc;x.category=cat;x.debtor=debtor;x.subcategory=subcategory;if(amountChanged)x.amount=amount;x.accountId=accountId;x.meioPagamento=meioPagamentoSel;x.cartaoId=cartaoId;x.dataCompensacao=dataCompensacao;});
       const pagas=grupo.filter(x=>x.status==='pago').length;
       const pend=grupo.filter(x=>x.status==='pendente').length;
+      const geradas=gerarParcelasFuturasFaltantes(t);
       editGroupId=null;
       save();closeForm();render();
-      showToast('✅ '+grupo.length+' parcelas atualizadas ('+pagas+' paga'+(pagas!==1?'s':'')+' + '+pend+' pendente'+(pend!==1?'s':'')+')', 'green');
+      showToast('✅ '+grupo.length+' parcelas atualizadas ('+pagas+' paga'+(pagas!==1?'s':'')+' + '+pend+' pendente'+(pend!==1?'s':'')+')'+(geradas?' + '+geradas+' futura(s) gerada(s)':''), 'green');
       return;
     }else if(editScope==='all-rec'){
       const recId=editRecId||(t.recorrente);
@@ -3070,6 +3097,13 @@ function saveTx(){
       }
       save();closeForm();render();
       showToast('✅ Despesa convertida em '+n+'x — parcelas futuras geradas','green');
+      return;
+    }
+    // Corrige série incompleta: gera parcelas futuras que faltam no mesmo groupId
+    if(t.installment){
+      const geradas=gerarParcelasFuturasFaltantes(t);
+      save();closeForm();render();
+      showToast(geradas?'✅ Parcela atualizada + '+geradas+' parcela(s) futura(s) gerada(s)':'✅ Parcela atualizada','green');
       return;
     }
     save();closeForm();render();return;
