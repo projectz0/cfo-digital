@@ -1286,17 +1286,33 @@ function updateGuiaImg(){
 function guiaPrev(){if(guiaIdx>0){guiaIdx--;updateGuiaImg();}}
 function guiaNext(){if(guiaIdx<GUIA_TOTAL-1){guiaIdx++;updateGuiaImg();}}
 
-async function demoMode(){
+function demoMode(){
+  openModal(
+    'Modo Demonstração',
+    'Como você quer testar o CFO Digital?',
+    [
+      {label:'Com histórico de pagamentos (exemplos prontos)',fn:'closeModal();_demoModeGo(true)'},
+      {label:'Vazio, quero testar do zero',fn:'closeModal();_demoModeGo(false)'},
+      {label:'Cancelar',cls:'modal-cancel',fn:'closeModal()'}
+    ]
+  );
+}
+
+async function _demoModeGo(comExemplos){
   // Sair do Supabase para não contaminar conta real
   currentUser=null;
   demoActive=true;
   try{await sb.auth.signOut();}catch(e){}
-  // Limpar qualquer dado anterior e carregar base demo
+  // Limpar qualquer dado anterior
   state={transactions:[],recurrentes:[],customCats:{receita:[],despesa:[]},catColors:{},accounts:[],metas:[],cartoes:[],notas:[]};
   document.getElementById('authOverlay').style.display='none';
   document.getElementById('btnSairDemo').style.display='flex';
   render();
-  setTimeout(()=>loadDemoData(),200);
+  if(comExemplos){
+    setTimeout(()=>loadDemoData(),200);
+  }else{
+    showToast('✅ Modo demonstração vazio — comece lançando suas receitas e despesas!','green');
+  }
 }
 
 function sairDemo(){
@@ -1588,7 +1604,6 @@ async function loadAndRender(user){
 
 /* ── MODO DEMO ── */
 function loadDemoData(){
-  if(!confirm('Isso vai substituir todos os seus dados atuais pelos dados de demonstração. Continuar?'))return;
   const d=uid;
   // IDs fixos para referências cruzadas
   const ACC1='demo-acc-itau',ACC2='demo-acc-nubank',ACC3='demo-acc-poup',ACC4='demo-acc-cart';
