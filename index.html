@@ -737,6 +737,7 @@ label.btn-like:hover{background:var(--surf2)}
         <button class="sb-sub-item" id="btnZerar" onclick="zerarConta()" style="display:none;color:var(--red-d)"><i class="ti ti-trash-x" style="color:var(--red-d)"></i>Zerar lançamentos</button>
       </div>
     </div>
+    <button class="sb-item" onclick="sairDemo()" id="btnSairDemo" style="display:none;color:var(--red-d)"><i class="ti ti-door-exit"></i>Sair da Demonstração</button>
     <button class="sb-item" onclick="logout()" id="btnLogout" style="display:none"><i class="ti ti-logout"></i>Sair</button>
   </div>
 </nav>
@@ -1293,8 +1294,19 @@ async function demoMode(){
   // Limpar qualquer dado anterior e carregar base demo
   state={transactions:[],recurrentes:[],customCats:{receita:[],despesa:[]},catColors:{},accounts:[],metas:[],cartoes:[],notas:[]};
   document.getElementById('authOverlay').style.display='none';
+  document.getElementById('btnSairDemo').style.display='flex';
   render();
   setTimeout(()=>loadDemoData(),200);
+}
+
+function sairDemo(){
+  demoActive=false;
+  currentUser=null;
+  state={transactions:[],recurrentes:[],customCats:{receita:[],despesa:[]},catColors:{},accounts:[],metas:[],cartoes:[],notas:[]};
+  document.getElementById('btnSairDemo').style.display='none';
+  document.getElementById('authOverlay').style.display='flex';
+  switchAuthTab('login');
+  render();
 }
 
 async function authSubmit(){
@@ -1379,6 +1391,7 @@ async function logout(){
   document.getElementById('authOverlay').style.display='flex';
   document.getElementById('userChip').style.display='none';
   document.getElementById('btnLogout').style.display='none';
+  document.getElementById('btnSairDemo').style.display='none';
   document.getElementById('btnRedefinirSenha').style.display='none';
   document.getElementById('btnZerar').style.display='none';
   document.getElementById('btnRecuperar').style.display='none';
@@ -1538,6 +1551,7 @@ function showApp(user){
   document.getElementById('userChip').style.display='flex';
   document.getElementById('userEmail').textContent=user.email;
   document.getElementById('btnLogout').style.display='flex';
+  document.getElementById('btnSairDemo').style.display='none';
   document.getElementById('btnRedefinirSenha').style.display='flex';
   document.getElementById('btnZerar').style.display='flex';
   // Mostra botão de recuperar se tiver dados locais
@@ -1793,6 +1807,7 @@ async function init(){
       document.getElementById('authOverlay').style.display='flex';
       document.getElementById('userChip').style.display='none';
       document.getElementById('btnLogout').style.display='none';
+      document.getElementById('btnSairDemo').style.display='none';
       document.getElementById('btnRedefinirSenha').style.display='none';
       document.getElementById('btnZerar').style.display='none';
       document.getElementById('btnRecuperar').style.display='none';
@@ -2744,6 +2759,12 @@ function renderList(){
   }).join('');
 }
 
+function deleteTerceiroTx(id){
+  const t=state.transactions.find(x=>x.id===id);if(!t)return;
+  if(!confirm('Excluir "'+t.description+'" ('+fmt(t.amount)+')?'))return;
+  state.transactions=state.transactions.filter(x=>x.id!==id);
+  save();render();
+}
 function renderTerceiros(txs){
   const el=document.getElementById('terView');
   if(!txs.length){el.innerHTML='<div class="empty"><i class="ti ti-mood-happy"></i>Nenhuma divida de terceiros neste mes.</div>';return}
@@ -2759,7 +2780,7 @@ function renderTerceiros(txs){
       const btn=isPend
         ?'<button class="st-btn st-pend" onclick="markSt(\''+t.id+'\',\'pago\')" title="Clique para marcar como Recebido"><i class="ti ti-clock" style="font-size:11px"></i>Pendente</button>'
         :'<button class="st-btn st-pago" onclick="markSt(\''+t.id+'\',\'pendente\')" title="Clique para marcar como Pendente"><i class="ti ti-check" style="font-size:11px"></i>Recebido</button>';
-      return'<div class="ter-item"><div class="ter-info"><div class="ter-idesc">'+t.description+(t.installment?' <span class="bdg bdg-inst">'+t.installment.current+'/'+t.installment.total+'x</span>':'')+'</div><div class="ter-imeta">'+t.category+' . '+d+'</div></div><div class="ter-iamt pv">'+fmt(t.amount)+'</div><button class="tx-edit bi" onclick="editTx(\''+t.id+'\')"><i class="ti ti-pencil"></i></button>'+btn+'</div>';
+      return'<div class="ter-item"><div class="ter-info"><div class="ter-idesc">'+t.description+(t.installment?' <span class="bdg bdg-inst">'+t.installment.current+'/'+t.installment.total+'x</span>':'')+'</div><div class="ter-imeta">'+t.category+' . '+d+'</div></div><div class="ter-iamt pv">'+fmt(t.amount)+'</div><button class="tx-edit bi" onclick="editTx(\''+t.id+'\')" title="Editar"><i class="ti ti-pencil"></i></button><button class="tx-del bi" onclick="deleteTerceiroTx(\''+t.id+'\')" title="Excluir"><i class="ti ti-trash"></i></button>'+btn+'</div>';
     }).join('');
     return'<div class="ter-group"><div class="ter-person"><div class="ter-name"><i class="ti ti-user-circle" style="color:var(--purple);font-size:18px"></i>'+person+' '+stLbl+'</div><div class="ter-total pv">'+fmt(tot)+'</div></div>'+rows+'</div>';
   }).join('');
