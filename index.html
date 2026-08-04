@@ -3986,12 +3986,13 @@ function ajustarDataCartao(){
   box.id='faturaChoiceBox';
   box.style.cssText='position:fixed;inset:0;z-index:10001;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.5)';
   const fechoInfo=diaFech?`<div style="font-size:11px;color:var(--txt3);margin-bottom:14px"><i class="ti ti-scissors"></i> Fechamento dia ${diaFech} — ${jaFechou?'<span style="color:#f59e0b;font-weight:700">já fechou, vai para a próxima</span>':'ainda aberta'}</div>`:'';
-  const btnAtualStyle=jaFechou
+  const btnCommon='white-space:normal;width:100%;display:block';
+  const btnAtualStyle=(jaFechou
     ?'padding:12px 16px;border-radius:10px;background:var(--surf2);border:1.5px solid var(--brd2);color:var(--txt2);font-size:14px;font-weight:600;cursor:pointer;text-align:left'
-    :'padding:12px 16px;border-radius:10px;background:var(--blue-l);border:1.5px solid var(--blue);color:#1d4ed8;font-size:14px;font-weight:700;cursor:pointer;text-align:left';
-  const btnProxStyle=jaFechou
+    :'padding:12px 16px;border-radius:10px;background:var(--blue-l);border:1.5px solid var(--blue);color:#1d4ed8;font-size:14px;font-weight:700;cursor:pointer;text-align:left')+';'+btnCommon;
+  const btnProxStyle=(jaFechou
     ?'padding:12px 16px;border-radius:10px;background:var(--green-l,#f0fdf4);border:1.5px solid var(--green);color:#15803d;font-size:14px;font-weight:700;cursor:pointer;text-align:left'
-    :'padding:12px 16px;border-radius:10px;background:var(--surf2);border:1.5px solid var(--brd2);color:var(--txt);font-size:14px;font-weight:600;cursor:pointer;text-align:left';
+    :'padding:12px 16px;border-radius:10px;background:var(--surf2);border:1.5px solid var(--brd2);color:var(--txt);font-size:14px;font-weight:600;cursor:pointer;text-align:left')+';'+btnCommon;
   box.innerHTML=`<div style="background:var(--surf);border-radius:14px;padding:24px 28px;max-width:340px;width:90%;box-shadow:0 20px 60px rgba(0,0,0,.3);border:1px solid var(--brd)">
     <div style="font-size:15px;font-weight:800;color:var(--txt);margin-bottom:4px"><i class="ti ti-credit-card" style="color:var(--blue)"></i> ${cartao.nome}</div>
     <div style="font-size:13px;color:var(--txt2);margin-bottom:8px;line-height:1.5">Em qual fatura entra este lançamento?</div>
