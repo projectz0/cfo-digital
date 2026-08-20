@@ -729,7 +729,6 @@ label.btn-like:hover{background:var(--surf2)}
       <div class="sb-subnav" id="sb-ferramentas-sub">
         <button class="sb-sub-item" onclick="abrirGuia()"><i class="ti ti-book-2"></i>Tutorial / Guia do App</button>
         <button class="sb-sub-item" onclick="exportData()"><i class="ti ti-download"></i>Exportar dados</button>
-        <label class="sb-sub-item" style="cursor:pointer"><i class="ti ti-upload"></i>Importar backup<input type="file" accept=".json" onchange="importData(event)" style="display:none"></label>
         <button id="btnRecuperar" class="sb-sub-item" onclick="recuperarDadosLocais()" style="display:none;color:#EF9F27"><i class="ti ti-database-import" style="color:#EF9F27"></i>Recuperar dados locais</button>
         <button class="sb-sub-item" onclick="abrirHistoricoVersoes()"><i class="ti ti-history"></i>Versões anteriores</button>
         <button class="sb-sub-item" id="btnRedefinirSenha" onclick="redefinirSenha()" style="display:none"><i class="ti ti-key"></i>Redefinir senha</button>
@@ -1148,9 +1147,25 @@ label.btn-like:hover{background:var(--surf2)}
     </div>
     <div id="fNotice" class="edit-notice" style="display:none"></div>
     <div id="fRecNotice" class="rec-notice" style="display:none"></div>
+    <div class="f-checks" style="margin-bottom:10px">
+      <label class="ck-lbl" id="instLbl"><input type="checkbox" id="fInst" onchange="toggleInst()"> Parcelado</label>
+      <div id="instRow" style="display:none" class="inst-row">
+        <input type="number" id="fInstN" min="2" max="60" value="2" oninput="updateInstPreview()">
+        <span style="font-size:13px;color:var(--txt2)">parcelas</span>
+      </div>
+      <div id="instModeRow" style="display:none;margin:2px 0 4px;padding:8px 10px;background:var(--surf2);border-radius:8px">
+        <div style="display:flex;flex-wrap:wrap;gap:4px 16px;font-size:13px;color:var(--txt2)">
+          <label style="display:flex;align-items:center;gap:5px;cursor:pointer"><input type="radio" name="fInstMode" value="total" checked onchange="updateInstPreview()"> O valor abaixo é o <strong>total da compra</strong></label>
+          <label style="display:flex;align-items:center;gap:5px;cursor:pointer"><input type="radio" name="fInstMode" value="parcela" onchange="updateInstPreview()"> É o valor de <strong>cada parcela</strong></label>
+        </div>
+        <div id="instPreview" style="font-size:12px;color:var(--txt3);margin-top:4px"></div>
+      </div>
+      <label class="ck-lbl" id="recLbl"><input type="checkbox" id="fRec" onchange="toggleRecCk()">
+        <i class="ti ti-refresh" style="font-size:14px;color:var(--teal)"></i> Recorrente (todo mes)</label>
+    </div>
     <div class="f-grid">
       <div class="f-fld"><label>Descricao *</label><input type="text" id="fDesc" placeholder="Ex: Conta de luz, Salario..."></div>
-      <div class="f-fld"><label id="fAmtLbl">Valor total (R$) *</label><input type="number" id="fAmt" min="0" step="0.01" placeholder="0,00"></div>
+      <div class="f-fld"><label id="fAmtLbl">Valor total (R$) *</label><input type="number" id="fAmt" min="0" step="0.01" placeholder="0,00" oninput="updateInstPreview()"></div>
       <div class="f-fld"><label>Categoria <button type="button" onclick="openCatModal()" style="font-size:11px;padding:2px 7px;margin-left:4px;background:var(--surf2);border-color:var(--brd2);color:var(--txt3)"><i class="ti ti-pencil" style="font-size:11px"></i>Editar</button></label><select id="fCat"></select></div>
       <div class="f-fld"><label>Data *</label><input type="date" id="fDate"></div>
       <div class="f-fld" id="fSubcatWrap" style="display:none"><label>Subcategoria <span style="font-size:11px;color:var(--txt3);font-weight:400">(opcional)</span></label><input type="text" id="fSubcat" list="subcatList" placeholder="Ex: Itaú, Mercado Livre..."><datalist id="subcatList"></datalist></div>
@@ -1164,13 +1179,6 @@ label.btn-like:hover{background:var(--surf2)}
     </div>
     <div class="f-checks">
       <label class="ck-lbl"><input type="checkbox" id="fPago"> Lancar ja como <strong>Pago</strong></label>
-      <label class="ck-lbl" id="instLbl"><input type="checkbox" id="fInst" onchange="toggleInst()"> Parcelado</label>
-      <div id="instRow" style="display:none" class="inst-row">
-        <input type="number" id="fInstN" min="2" max="60" value="2">
-        <span style="font-size:13px;color:var(--txt2)">parcelas</span>
-      </div>
-      <label class="ck-lbl" id="recLbl"><input type="checkbox" id="fRec" onchange="toggleRecCk()">
-        <i class="ti ti-refresh" style="font-size:14px;color:var(--teal)"></i> Recorrente (todo mes)</label>
     </div>
     <div class="f-acts">
       <button class="bp" onclick="saveTx()"><i class="ti ti-check"></i> <span id="fSaveLbl">Salvar</span></button>
@@ -2887,7 +2895,9 @@ function openForm(type){
   document.getElementById('fInst').checked=false;
   document.getElementById('fRec').checked=false;
   document.getElementById('instRow').style.display='none';
+  document.getElementById('instModeRow').style.display='none';
   document.getElementById('fInstN').value='2';
+  document.querySelector('input[name="fInstMode"][value="total"]').checked=true;
   meioPagamentoSel=null;
   renderMeioBtns(type);
   document.getElementById('fMeioWrap').style.display=type==='despesa'?'block':'none';
@@ -2952,6 +2962,8 @@ function _editGo(id,scope){
   document.getElementById('fDebtorWrap').style.display=t.type==='despesa'?'':'none';
   document.getElementById('fInst').checked=false;
   document.getElementById('instRow').style.display='none';
+  document.getElementById('instModeRow').style.display='none';
+  document.querySelector('input[name="fInstMode"][value="total"]').checked=true;
   document.getElementById('fRec').checked=false;
   document.getElementById('fNotice').style.display='none';
   document.getElementById('fRecNotice').style.display='none';
@@ -3007,13 +3019,30 @@ function handleFormBg(e){/* clique fora não fecha mais — evita perder lançam
 function toggleInst(){
   const on=document.getElementById('fInst').checked;
   document.getElementById('instRow').style.display=on?'flex':'none';
+  document.getElementById('instModeRow').style.display=on?'block':'none';
   document.getElementById('recLbl').classList.toggle('disabled',on);
   if(on)document.getElementById('fRec').checked=false;
+  updateInstPreview();
 }
 function toggleRecCk(){
   const on=document.getElementById('fRec').checked;
   document.getElementById('instLbl').classList.toggle('disabled',on);
-  if(on){document.getElementById('fInst').checked=false;document.getElementById('instRow').style.display='none'}
+  if(on){document.getElementById('fInst').checked=false;document.getElementById('instRow').style.display='none';document.getElementById('instModeRow').style.display='none'}
+}
+function getInstMode(){
+  return document.querySelector('input[name="fInstMode"]:checked')?.value||'total';
+}
+function updateInstPreview(){
+  const prev=document.getElementById('instPreview');
+  if(!document.getElementById('fInst').checked){prev.textContent='';return}
+  const n=parseInt(document.getElementById('fInstN').value)||0;
+  const amt=parseFloat(document.getElementById('fAmt').value)||0;
+  if(!n||!amt){prev.textContent='';return}
+  if(getInstMode()==='parcela'){
+    prev.textContent=n+'x de '+fmt(amt)+' = total de '+fmt(amt*n);
+  }else{
+    prev.textContent=n+'x de '+fmt(amt/n)+' (total de '+fmt(amt)+')';
+  }
 }
 
 // Detecta/gera parcelas futuras que faltam no MESMO groupId (nunca por descrição — evita juntar grupos diferentes)
@@ -3123,7 +3152,7 @@ function saveTx(){
     if(isInst2&&!t.installment&&!t.recorrente){
       const n=parseInt(document.getElementById('fInstN').value);
       if(n<2||n>60){alert('Parcelas entre 2 e 60.');return}
-      const gid=uid(),pv=parseFloat((amount/n).toFixed(2)),base=new Date(date+'T00:00:00');
+      const gid=uid(),pv=getInstMode()==='parcela'?amount:parseFloat((amount/n).toFixed(2)),base=new Date(date+'T00:00:00');
       t.amount=pv;
       t.installment={current:1,total:n,groupId:gid};
       for(let i=1;i<n;i++){
@@ -3154,7 +3183,7 @@ function saveTx(){
   }else if(isInst){
     const n=parseInt(document.getElementById('fInstN').value);
     if(n<2||n>60){alert('Parcelas entre 2 e 60.');return}
-    const gid=uid(),base=new Date(date+'T00:00:00'),pv=parseFloat((amount/n).toFixed(2));
+    const gid=uid(),base=new Date(date+'T00:00:00'),pv=getInstMode()==='parcela'?amount:parseFloat((amount/n).toFixed(2));
     for(let i=0;i<n;i++){const d=new Date(base);d.setMonth(d.getMonth()+i);state.transactions.push({id:uid(),type:fType,description:desc,category:cat,amount:pv,date:d.toISOString().split('T')[0],status:i===0?status:'pendente',debtor,subcategory,accountId,meioPagamento:meioPagamentoSel,cartaoId,dataCompensacao,installment:{current:i+1,total:n,groupId:gid},recorrente:null})}
   }else{
     state.transactions.push({id:uid(),type:fType,description:desc,category:cat,amount,date,status,debtor,subcategory,accountId,meioPagamento:meioPagamentoSel,cartaoId,dataCompensacao,installment:null,recorrente:null});
