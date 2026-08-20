@@ -6,6 +6,20 @@ Formato: [semver](https://semver.org/lang/pt-BR/) — `MAIOR.MENOR.CORREÇÃO`. 
 
 ---
 
+## [1.1.0] — 20/08/2026
+
+### Adicionado
+- Ao marcar "Parcelado", o app agora pergunta se o valor digitado é o **total da compra** ou o **valor de cada parcela**, com prévia ao vivo (ex: "10x de R$100,00 = total de R$1.000,00")
+- Checkboxes de Parcelado/Recorrente movidos para antes dos campos de Descrição/Valor no formulário — a decisão vem primeiro
+
+### Corrigido
+- Ambiguidade real que gerava parcelas com valor errado: o app sempre assumiu "valor = total da compra" sem deixar isso claro, então digitar o valor de cada parcela por engano gerava parcelas 10x (ou mais) menores que o esperado
+
+### Removido
+- Opção "Importar backup" do menu Ferramentas — sem validação dos dados importados, foi a porta de entrada de lançamentos não identificados investigados na v1.0.0. Função ainda existe no código, só sem entrada no menu
+
+---
+
 ## [1.0.0] — 04/08/2026
 
 Primeira versão marcada — ponto de partida do versionamento. Reúne tudo que foi construído e corrigido até aqui.
