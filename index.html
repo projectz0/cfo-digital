@@ -704,7 +704,7 @@ label.btn-like:hover{background:var(--surf2)}
       <div class="sb-subnav" id="sb-despesas-sub">
         <button class="sb-sub-item" data-page="despesas" onclick="setPage('despesas')"><i class="ti ti-list"></i>Todas</button>
         <button class="sb-sub-item" data-page="parcelados" onclick="setPage('parcelados')"><i class="ti ti-credit-card"></i>Parcelados</button>
-        <button class="sb-sub-item" data-page="terceiros" onclick="setPage('terceiros')"><i class="ti ti-users"></i>Terceiros</button>
+        <button class="sb-sub-item" data-page="terceiros" onclick="setPage('terceiros')"><i class="ti ti-users"></i>Dívida de Terceiros</button>
         <button class="sb-sub-item" data-page="recorrentes" onclick="setPage('recorrentes')"><i class="ti ti-refresh"></i>Recorrentes</button>
       </div>
     </li>
@@ -1162,6 +1162,8 @@ label.btn-like:hover{background:var(--surf2)}
       </div>
       <label class="ck-lbl" id="recLbl"><input type="checkbox" id="fRec" onchange="toggleRecCk()">
         <i class="ti ti-refresh" style="font-size:14px;color:var(--teal)"></i> Recorrente (todo mes)</label>
+      <label class="ck-lbl" id="terLbl"><input type="checkbox" id="fTer" onchange="toggleTer()">
+        <i class="ti ti-users" style="font-size:14px;color:var(--purple)"></i> Dívida de Terceiros</label>
     </div>
     <div class="f-grid">
       <div class="f-fld"><label>Descricao *</label><input type="text" id="fDesc" placeholder="Ex: Conta de luz, Salario..."></div>
@@ -1169,7 +1171,7 @@ label.btn-like:hover{background:var(--surf2)}
       <div class="f-fld"><label>Categoria <button type="button" onclick="openCatModal()" style="font-size:11px;padding:2px 7px;margin-left:4px;background:var(--surf2);border-color:var(--brd2);color:var(--txt3)"><i class="ti ti-pencil" style="font-size:11px"></i>Editar</button></label><select id="fCat"></select></div>
       <div class="f-fld"><label>Data *</label><input type="date" id="fDate"></div>
       <div class="f-fld" id="fSubcatWrap" style="display:none"><label>Subcategoria <span style="font-size:11px;color:var(--txt3);font-weight:400">(opcional)</span></label><input type="text" id="fSubcat" list="subcatList" placeholder="Ex: Itaú, Mercado Livre..."><datalist id="subcatList"></datalist></div>
-      <div class="f-fld" id="fDebtorWrap"><label>Devedor (terceiro)</label><input type="text" id="fDebtor" placeholder="Nome de quem vai pagar"></div>
+      <div class="f-fld" id="fDebtorWrap"><label>Nome do terceiro</label><input type="text" id="fDebtor" placeholder="Nome de quem vai pagar"></div>
       <div class="f-fld f-full" id="fMeioWrap"><label>Meio de pagamento <span style="font-size:11px;color:var(--txt3);font-weight:400">(opcional)</span></label>
         <div class="meio-btns" id="meioBtns"></div>
       </div>
@@ -1927,7 +1929,7 @@ function setPage(page){
   if(tabMap[page])view.tab=tabMap[page];
   // list page header
   if(['receitas','despesas','terceiros','parcelados'].includes(page)){
-    const titles={receitas:'Receitas',despesas:'Despesas',terceiros:'Terceiros',parcelados:'Parcelados'};
+    const titles={receitas:'Receitas',despesas:'Despesas',terceiros:'Dívida de Terceiros',parcelados:'Parcelados'};
     document.getElementById('listPageTitle').textContent=titles[page];
     const actsEl=document.getElementById('listPageActs');
     const btnCat='<button onclick="openCatModal()" style="margin-left:4px"><i class="ti ti-tags"></i></button>';
@@ -1947,7 +1949,7 @@ function setPage(page){
   // Mobile: mostrar botão home e atualizar título quando não estiver no painel
   const mbHome=document.getElementById('mbHome');
   const mbTitle=document.getElementById('mbTitle');
-  const PAGE_LABELS={painel:'CFO Digital',receitas:'Receitas',despesas:'Despesas',terceiros:'Terceiros',parcelados:'Parcelados',recorrentes:'Recorrentes',contas:'Contas & Cartões',faturas:'Faturas',metas:'Metas',calendario:'Calendário',transferencias:'Transferências',relatorio:'Relatório'};
+  const PAGE_LABELS={painel:'CFO Digital',receitas:'Receitas',despesas:'Despesas',terceiros:'Dívida de Terceiros',parcelados:'Parcelados',recorrentes:'Recorrentes',contas:'Contas & Cartões',faturas:'Faturas',metas:'Metas',calendario:'Calendário',transferencias:'Transferências',relatorio:'Relatório'};
   if(mbHome){mbHome.style.display=page==='painel'?'none':'flex';}
   if(mbTitle){
     if(page==='painel') mbTitle.innerHTML='<i class="ti ti-chart-pie" style="color:var(--green)"></i> CFO Digital';
@@ -2736,7 +2738,7 @@ function renderList(){
   const txs=applyFilters(allMonth);
 
   const total=txs.reduce((s,t)=>s+t.amount,0);
-  const tabNames={todos:'Todos os lancamentos',despesas:'Despesas',receitas:'Receitas',terceiros:'Dividas de Terceiros',parcelados:'Parcelados'};
+  const tabNames={todos:'Todos os lancamentos',despesas:'Despesas',receitas:'Receitas',terceiros:'Dívida de Terceiros',parcelados:'Parcelados'};
   const secEl=document.getElementById('secHdr');
   secEl.style.display='flex';
   secEl.innerHTML=txs.length
@@ -2884,7 +2886,9 @@ function openForm(type){
   document.getElementById('instLbl').classList.remove('disabled');
   document.getElementById('recLbl').style.display='flex';
   document.getElementById('recLbl').classList.remove('disabled');
-  document.getElementById('fDebtorWrap').style.display=type==='despesa'?'':'none';
+  document.getElementById('terLbl').style.display=type==='despesa'?'flex':'none';
+  document.getElementById('fTer').checked=false;
+  document.getElementById('fDebtorWrap').style.display='none';
   document.getElementById('fDesc').placeholder=type==='receita'?'Ex: Salário, Freelance...':'Ex: Conta de luz, Mercado...';
   document.getElementById('fCat').innerHTML=getCats(type).map(c=>'<option>'+c+'</option>').join('');
   const today=new Date(),d=new Date(cy,cm,Math.min(today.getDate(),new Date(cy,cm+1,0).getDate()));
@@ -2959,7 +2963,9 @@ function _editGo(id,scope){
   document.getElementById('fSubcat').value=t.subcategory||'';
   _refreshSubcatList();
   document.getElementById('fPago').checked=t.status==='pago';
-  document.getElementById('fDebtorWrap').style.display=t.type==='despesa'?'':'none';
+  document.getElementById('terLbl').style.display=t.type==='despesa'?'flex':'none';
+  document.getElementById('fTer').checked=!!t.debtor;
+  document.getElementById('fDebtorWrap').style.display=(t.debtor&&t.type==='despesa')?'':'none';
   document.getElementById('fInst').checked=false;
   document.getElementById('instRow').style.display='none';
   document.getElementById('instModeRow').style.display='none';
@@ -3029,6 +3035,13 @@ function toggleRecCk(){
   document.getElementById('instLbl').classList.toggle('disabled',on);
   if(on){document.getElementById('fInst').checked=false;document.getElementById('instRow').style.display='none';document.getElementById('instModeRow').style.display='none'}
 }
+// Terceiro é independente de Parcelado/Recorrente (ex: aluguel recorrente pago pelo Pai)
+function toggleTer(){
+  const on=document.getElementById('fTer').checked;
+  document.getElementById('fDebtorWrap').style.display=(on&&fType==='despesa')?'':'none';
+  if(!on)document.getElementById('fDebtor').value='';
+  updateMeioUI();
+}
 function getInstMode(){
   return document.querySelector('input[name="fInstMode"]:checked')?.value||'total';
 }
@@ -3078,7 +3091,7 @@ function saveTx(){
   const amount=parseFloat(document.getElementById('fAmt').value);
   const cat=document.getElementById('fCat').value;
   const date=document.getElementById('fDate').value;
-  const debtor=document.getElementById('fDebtor').value.trim()||null;
+  const debtor=document.getElementById('fTer').checked?(document.getElementById('fDebtor').value.trim()||null):null;
   const subcategory=document.getElementById('fSubcat').value.trim()||null;
   const status=document.getElementById('fPago').checked?'pago':'pendente';
   let accountId=document.getElementById('fAccount').value||null;
@@ -3955,7 +3968,8 @@ function updateMeioUI(){
   const isCredito=meioPagamentoSel==='credito';
   const isDinheiro=meioPagamentoSel==='dinheiro';
   const isCheque=meioPagamentoSel==='cheque';
-  const needsAccount=meioPagamentoSel&&!isDinheiro; // PIX, débito, TED, boleto, cheque, débito automático e agora também crédito
+  const isTer=fType==='despesa'&&document.getElementById('fTer')?.checked;
+  const needsAccount=meioPagamentoSel&&!isDinheiro&&!isTer; // dívida de terceiro nunca debita conta própria, mesmo pagando de cartão
   const cartaoWrap=document.getElementById('fCartaoWrap');
   const compWrap=document.getElementById('fCompensacaoWrap');
   const accWrap=document.getElementById('fAccountWrap');
