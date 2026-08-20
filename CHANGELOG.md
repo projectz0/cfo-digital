@@ -6,6 +6,18 @@ Formato: [semver](https://semver.org/lang/pt-BR/) — `MAIOR.MENOR.CORREÇÃO`. 
 
 ---
 
+## [1.2.0] — 20/08/2026
+
+### Adicionado
+- Nova caixinha "Dívida de Terceiros" no formulário de despesa, ao lado de Parcelado/Recorrente — independente das duas (pode marcar junto, ex: conta recorrente paga por outra pessoa)
+- Ao marcar, some o campo "Conta debitada" e aparece o campo com o nome do terceiro; meio de pagamento continua normal (cartão de crédito continua anexando a fatura)
+- Menu lateral e cabeçalhos renomeados de "Terceiros" para "Dívida de Terceiros"
+
+### Observação
+- Mudança só de formulário/exibição — o dado salvo não muda, lançamentos existentes não são afetados (abrem com a caixinha pré-marcada corretamente ao editar)
+
+---
+
 ## [1.1.0] — 20/08/2026
 
 ### Adicionado
