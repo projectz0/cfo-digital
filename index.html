@@ -2243,7 +2243,8 @@ function applyFilters(txs){
   if(tab==='parcelados')r=r.filter(t=>!!t.installment);
   if(cat)r=r.filter(t=>t.category===cat);
   if(status!=='all')r=r.filter(t=>t.status===status);
-  if(conta)r=r.filter(t=>t.accountId===conta);
+  if(conta==='__sem_conta__')r=r.filter(t=>!t.accountId);
+  else if(conta)r=r.filter(t=>t.accountId===conta);
   if(cartao)r=r.filter(t=>t.cartaoId===cartao);
   if(search){const sl=search.toLowerCase().replace(',','.');r=r.filter(t=>(t.description+t.category+(t.debtor||'')+(t.subcategory||'')+t.amount).toLowerCase().includes(sl)||String(t.amount).includes(sl.replace('r$','').trim()));}
   return r;
@@ -2734,11 +2735,11 @@ function renderList(){
   if(cxEl){
     const prevConta=cxEl.value;
     const usedAccIds=[...new Set(allMonth.filter(t=>t.accountId).map(t=>t.accountId))];
-    cxEl.innerHTML='<option value="">Todas</option>'+usedAccIds.map(id=>{
+    cxEl.innerHTML='<option value="">Todas</option><option value="__sem_conta__"'+(prevConta==='__sem_conta__'?' selected':'')+'>⚠ Sem conta</option>'+usedAccIds.map(id=>{
       const a=(state.accounts||[]).find(x=>x.id===id);
       return a?'<option value="'+id+'"'+(id===prevConta?' selected':'')+'>'+a.name+'</option>':'';
     }).join('');
-    if(prevConta&&usedAccIds.includes(prevConta))cxEl.value=prevConta;
+    if(prevConta&&(prevConta==='__sem_conta__'||usedAccIds.includes(prevConta)))cxEl.value=prevConta;
     view.conta=cxEl.value;
   }
   const txs=applyFilters(allMonth);
