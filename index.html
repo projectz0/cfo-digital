@@ -805,8 +805,8 @@ label.btn-like:hover{background:var(--surf2)}
       <select id="fCartaoFilter" onchange="renderList()">
         <option value="">Todos</option>
       </select>
-      <span class="filt-label">Subcategoria:</span>
-      <select id="fSubcatFilter" onchange="renderList()">
+      <span class="filt-label">Conta:</span>
+      <select id="fContaFilter" onchange="renderList()">
         <option value="">Todas</option>
       </select>
       <button id="sortDateBtn" class="sort-btn" onclick="toggleListSort('date')" title="Ordenar por data"><i class="ti ti-calendar"></i><span id="sortDateLbl">Data ↓</span></button>
@@ -1853,7 +1853,7 @@ const KEY='cf_v4';
 let state={transactions:[],recurrentes:[],customCats:{receita:[],despesa:[]},catColors:{},accounts:[],metas:[],cartoes:[],notas:[]};
 let demoActive=false;
 let cm=new Date().getMonth(), cy=new Date().getFullYear();
-let view={tab:'todos',cat:'',status:'all',search:'',subcat:'',cartao:''};
+let view={tab:'todos',cat:'',status:'all',search:'',conta:'',cartao:''};
 let listSort={field:'date',dir:'desc'};
 function toggleListSort(field){
   if(listSort.field===field)listSort.dir=listSort.dir==='desc'?'asc':'desc';
@@ -2235,7 +2235,7 @@ function ensureRecurrentes(m,y){
 
 /* ── FILTERS ── */
 function applyFilters(txs){
-  const {tab,cat,status,search,subcat,cartao}=view;
+  const {tab,cat,status,search,conta,cartao}=view;
   let r=txs;
   if(tab==='despesas')  r=r.filter(t=>t.type==='despesa'&&!t.debtor);
   if(tab==='receitas')  r=r.filter(t=>t.type==='receita');
@@ -2243,7 +2243,7 @@ function applyFilters(txs){
   if(tab==='parcelados')r=r.filter(t=>!!t.installment);
   if(cat)r=r.filter(t=>t.category===cat);
   if(status!=='all')r=r.filter(t=>t.status===status);
-  if(subcat)r=r.filter(t=>t.subcategory===subcat);
+  if(conta)r=r.filter(t=>t.accountId===conta);
   if(cartao)r=r.filter(t=>t.cartaoId===cartao);
   if(search){const sl=search.toLowerCase().replace(',','.');r=r.filter(t=>(t.description+t.category+(t.debtor||'')+(t.subcategory||'')+t.amount).toLowerCase().includes(sl)||String(t.amount).includes(sl.replace('r$','').trim()));}
   return r;
@@ -2578,9 +2578,9 @@ function selectAll(){
 function clearFilters(){
   document.getElementById('fSearch').value='';
   document.getElementById('fStatus').value='all';
-  const sf=document.getElementById('fSubcatFilter');
-  if(sf)sf.value='';
-  view.cat='';view.status='all';view.search='';view.subcat='';
+  const cx=document.getElementById('fContaFilter');
+  if(cx)cx.value='';
+  view.cat='';view.status='all';view.search='';view.conta='';
   // Reseta filtro de categoria (tab buttons)
   document.querySelectorAll('[data-cat]').forEach(b=>b.classList.remove('on'));
   const allBtn=document.querySelector('[data-cat=""]');
@@ -2709,7 +2709,7 @@ function _bulkDel(){
 function renderList(){
   view.search=document.getElementById('fSearch').value||'';
   view.status=document.getElementById('fStatus').value;
-  view.subcat=document.getElementById('fSubcatFilter').value||'';
+  view.conta=document.getElementById('fContaFilter').value||'';
   view.cartao=document.getElementById('fCartaoFilter')?.value||'';
   // atualizar visual dos botões de sort
   const arrows={asc:'↑',desc:'↓'};
@@ -2730,11 +2730,17 @@ function renderList(){
     }).join('');
     if(prevCard&&usedCardIds.includes(prevCard))cfEl.value=prevCard;
   }
-  const subcats=[...new Set(allMonth.map(t=>t.subcategory).filter(Boolean))].sort();
-  const sfEl=document.getElementById('fSubcatFilter');
-  const prevSub=sfEl.value;
-  sfEl.innerHTML='<option value="">Todas</option>'+subcats.map(s=>'<option value="'+s+'"'+(s===prevSub?' selected':'')+'>'+s+'</option>').join('');
-  view.subcat=sfEl.value;
+  const cxEl=document.getElementById('fContaFilter');
+  if(cxEl){
+    const prevConta=cxEl.value;
+    const usedAccIds=[...new Set(allMonth.filter(t=>t.accountId).map(t=>t.accountId))];
+    cxEl.innerHTML='<option value="">Todas</option>'+usedAccIds.map(id=>{
+      const a=(state.accounts||[]).find(x=>x.id===id);
+      return a?'<option value="'+id+'"'+(id===prevConta?' selected':'')+'>'+a.name+'</option>':'';
+    }).join('');
+    if(prevConta&&usedAccIds.includes(prevConta))cxEl.value=prevConta;
+    view.conta=cxEl.value;
+  }
   const txs=applyFilters(allMonth);
 
   const total=txs.reduce((s,t)=>s+t.amount,0);
