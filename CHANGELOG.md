@@ -6,6 +6,13 @@ Formato: [semver](https://semver.org/lang/pt-BR/) — `MAIOR.MENOR.CORREÇÃO`. 
 
 ---
 
+## [1.3.0] — 28/08/2026
+
+### Modificado
+- Filtro de Subcategoria na lista de lançamentos trocado por filtro de Conta (mesmo padrão do filtro de Cartão já existente) — mostra só as contas usadas no mês selecionado, filtra por conta debitada. Subcategoria era um texto livre pouco usado como filtro na prática; o campo continua existindo no formulário e na busca por texto, só perdeu o filtro dedicado na lista.
+
+---
+
 ## [1.2.0] — 20/08/2026
 
 ### Adicionado
