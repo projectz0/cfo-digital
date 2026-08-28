@@ -6,6 +6,13 @@ Formato: [semver](https://semver.org/lang/pt-BR/) — `MAIOR.MENOR.CORREÇÃO`. 
 
 ---
 
+## [1.3.1] — 28/08/2026
+
+### Adicionado
+- Opção "⚠ Sem conta" no filtro de Conta — mostra despesas/receitas próprias sem conta vinculada, pra facilitar achar e completar o cadastro. Aparece sempre, independente do mês.
+
+---
+
 ## [1.3.0] — 28/08/2026
 
 ### Modificado
