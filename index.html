@@ -2211,6 +2211,7 @@ function ensureRecurrentes(m,y){
     const rY=parseInt(startYM.split('-')[0]);
     const rM=parseInt(startYM.split('-')[1])-1;
     if(y<rY||(y===rY&&m<rM))return;
+    if((rec.skipYM||[]).includes(y+'-'+String(m+1).padStart(2,'0')))return;
     const exists=state.transactions.some(t=>{
       if(t.recorrente!==rec.id)return false;
       const d=new Date(t.date+'T00:00:00');
@@ -3302,7 +3303,14 @@ function delTx(id){
 
 function _delScope(id,scope){
   const t=state.transactions.find(x=>x.id===id);if(!t)return;
-  if(scope==='single')state.transactions=state.transactions.filter(x=>x.id!==id);
+  if(scope==='single'){
+    if(t.recorrente){
+      const rec=(state.recurrentes||[]).find(r=>r.id===t.recorrente);
+      const ym=t.date.substring(0,7);
+      if(rec){rec.skipYM=rec.skipYM||[];if(!rec.skipYM.includes(ym))rec.skipYM.push(ym);}
+    }
+    state.transactions=state.transactions.filter(x=>x.id!==id);
+  }
   else if(scope==='future'){const{current,groupId}=t.installment;state.transactions=state.transactions.filter(x=>!x.installment||x.installment.groupId!==groupId||x.installment.current<current)}
   else if(scope==='all'){const gid=t.installment.groupId;state.transactions=state.transactions.filter(x=>!x.installment||x.installment.groupId!==gid)}
   else if(scope==='stop-rec'){const recId=t.recorrente;const rec=state.recurrentes.find(r=>r.id===recId);if(rec)rec.active=false;state.transactions=state.transactions.filter(x=>x.recorrente!==recId||x.status!=='pendente')}
