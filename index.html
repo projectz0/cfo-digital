@@ -2792,10 +2792,7 @@ function renderList(){
 }
 
 function deleteTerceiroTx(id){
-  const t=state.transactions.find(x=>x.id===id);if(!t)return;
-  if(!confirm('Excluir "'+t.description+'" ('+fmt(t.amount)+')?'))return;
-  state.transactions=state.transactions.filter(x=>x.id!==id);
-  save();render();
+  delTx(id);
 }
 function renderTerceiros(txs){
   const el=document.getElementById('terView');
@@ -4933,6 +4930,12 @@ function relToggleStatus(id){
 }
 function relDeleteTx(id){
   if(!confirm('Excluir este lançamento?'))return;
+  const tx=state.transactions.find(t=>t.id===id);
+  if(tx&&tx.recorrente){
+    const rec=(state.recurrentes||[]).find(r=>r.id===tx.recorrente);
+    const ym=tx.date.substring(0,7);
+    if(rec){rec.skipYM=rec.skipYM||[];if(!rec.skipYM.includes(ym))rec.skipYM.push(ym);}
+  }
   state.transactions=state.transactions.filter(t=>t.id!==id);
   save();renderRelatorio();renderCards();
 }
