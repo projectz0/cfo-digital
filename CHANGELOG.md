@@ -6,6 +6,13 @@ Formato: [semver](https://semver.org/lang/pt-BR/) — `MAIOR.MENOR.CORREÇÃO`. 
 
 ---
 
+## [1.3.3] — 06/10/2026
+
+### Corrigido
+- A correção da v1.3.2 não valia pra aba Dívida de Terceiros nem pra lixeira do Relatório: esses dois botões apagavam direto, por um caminho antigo, e o lançamento recorrente voltava. Agora a aba Terceiros usa o mesmo menu das outras abas ("Remover só este mês" / "Parar recorrência", ou opções de parcela) e a lixeira do Relatório também registra o mês removido.
+
+---
+
 ## [1.3.2] — 06/10/2026
 
 ### Corrigido
