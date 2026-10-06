@@ -6,6 +6,13 @@ Formato: [semver](https://semver.org/lang/pt-BR/) — `MAIOR.MENOR.CORREÇÃO`. 
 
 ---
 
+## [1.3.2] — 06/10/2026
+
+### Corrigido
+- Lançamento recorrente excluído com "Remover só este mês" voltava sozinho: o app recriava a ocorrência assim que via o mês sem lançamento. Agora o mês removido é registrado na recorrência (`skipYM`) e não é recriado; os outros meses continuam sendo gerados normalmente. Pra encerrar de vez, continua valendo "Parar recorrência".
+
+---
+
 ## [1.3.1] — 28/08/2026
 
 ### Adicionado
