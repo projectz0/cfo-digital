@@ -6,6 +6,13 @@ Formato: [semver](https://semver.org/lang/pt-BR/) — `MAIOR.MENOR.CORREÇÃO`. 
 
 ---
 
+## [1.4.0] — 16/11/2026
+
+### Adicionado
+- Filtro "Origem" na aba Parcelados: **Todos / Minhas / Dívida de Terceiros** — separa as parcelas das suas despesas das parcelas pagas por outras pessoas. Aparece só nessa aba, volta pra "Todos" ao trocar de aba ou clicar em limpar filtros.
+
+---
+
 ## [1.3.3] — 06/10/2026
 
 ### Corrigido
