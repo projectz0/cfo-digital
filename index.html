@@ -809,6 +809,14 @@ label.btn-like:hover{background:var(--surf2)}
       <select id="fContaFilter" onchange="renderList()">
         <option value="">Todas</option>
       </select>
+      <span id="fOrigemWrap" style="display:none;align-items:center;gap:inherit">
+        <span class="filt-label">Origem:</span>
+        <select id="fOrigemFilter" onchange="renderList()">
+          <option value="">Todos</option>
+          <option value="minhas">Minhas</option>
+          <option value="terceiros">Dívida de Terceiros</option>
+        </select>
+      </span>
       <button id="sortDateBtn" class="sort-btn" onclick="toggleListSort('date')" title="Ordenar por data"><i class="ti ti-calendar"></i><span id="sortDateLbl">Data ↓</span></button>
       <button id="sortValBtn" class="sort-btn" onclick="toggleListSort('valor')" title="Ordenar por valor"><i class="ti ti-currency-dollar"></i><span id="sortValLbl">Valor</span></button>
       <button class="btn-sel-all" onclick="toggleSelMode()" id="btnSelMode"><i class="ti ti-checkbox" style="font-size:13px"></i>Selecionar</button>
@@ -1853,7 +1861,7 @@ const KEY='cf_v4';
 let state={transactions:[],recurrentes:[],customCats:{receita:[],despesa:[]},catColors:{},accounts:[],metas:[],cartoes:[],notas:[]};
 let demoActive=false;
 let cm=new Date().getMonth(), cy=new Date().getFullYear();
-let view={tab:'todos',cat:'',status:'all',search:'',conta:'',cartao:''};
+let view={tab:'todos',cat:'',status:'all',search:'',conta:'',cartao:'',origem:''};
 let listSort={field:'date',dir:'desc'};
 function toggleListSort(field){
   if(listSort.field===field)listSort.dir=listSort.dir==='desc'?'asc':'desc';
@@ -1939,8 +1947,10 @@ function setPage(page){
     const isTer=page==='terceiros';
     document.getElementById('filtBar').style.display=isTer?'none':'flex';
     document.getElementById('secHdr').style.display='flex';
+    document.getElementById('fOrigemWrap').style.display=page==='parcelados'?'flex':'none';
   }
-  view.cat='';view.search='';view.status='all';view.cartao='';
+  view.cat='';view.search='';view.status='all';view.cartao='';view.origem='';
+  const fof=document.getElementById('fOrigemFilter');if(fof)fof.value='';
   const fs=document.getElementById('fSearch');if(fs)fs.value='';
   const fst=document.getElementById('fStatus');if(fst)fst.value='all';
   const fcf=document.getElementById('fCartaoFilter');if(fcf)fcf.value='';
@@ -2241,7 +2251,11 @@ function applyFilters(txs){
   if(tab==='despesas')  r=r.filter(t=>t.type==='despesa'&&!t.debtor);
   if(tab==='receitas')  r=r.filter(t=>t.type==='receita');
   if(tab==='terceiros') r=r.filter(t=>!!t.debtor);
-  if(tab==='parcelados')r=r.filter(t=>!!t.installment);
+  if(tab==='parcelados'){
+    r=r.filter(t=>!!t.installment);
+    if(view.origem==='minhas')r=r.filter(t=>!t.debtor);
+    else if(view.origem==='terceiros')r=r.filter(t=>!!t.debtor);
+  }
   if(cat)r=r.filter(t=>t.category===cat);
   if(status!=='all')r=r.filter(t=>t.status===status);
   if(conta==='__sem_conta__')r=r.filter(t=>!t.accountId);
@@ -2582,7 +2596,8 @@ function clearFilters(){
   document.getElementById('fStatus').value='all';
   const cx=document.getElementById('fContaFilter');
   if(cx)cx.value='';
-  view.cat='';view.status='all';view.search='';view.conta='';
+  const fof=document.getElementById('fOrigemFilter');if(fof)fof.value='';
+  view.cat='';view.status='all';view.search='';view.conta='';view.origem='';
   // Reseta filtro de categoria (tab buttons)
   document.querySelectorAll('[data-cat]').forEach(b=>b.classList.remove('on'));
   const allBtn=document.querySelector('[data-cat=""]');
@@ -2713,6 +2728,7 @@ function renderList(){
   view.status=document.getElementById('fStatus').value;
   view.conta=document.getElementById('fContaFilter').value||'';
   view.cartao=document.getElementById('fCartaoFilter')?.value||'';
+  view.origem=view.tab==='parcelados'?(document.getElementById('fOrigemFilter')?.value||''):'';
   // atualizar visual dos botões de sort
   const arrows={asc:'↑',desc:'↓'};
   const sdBtn=document.getElementById('sortDateBtn');const svBtn=document.getElementById('sortValBtn');
