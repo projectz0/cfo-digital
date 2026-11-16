@@ -6,6 +6,22 @@ Formato: [semver](https://semver.org/lang/pt-BR/) — `MAIOR.MENOR.CORREÇÃO`. 
 
 ---
 
+## [1.6.0] — 16/11/2026
+
+### Adicionado
+- Nova aba lateral **Comparar meses**: escolhe dois meses (padrão: o anterior × o aberto no menu) e mostra, lado a lado:
+  - **Falta lançar**: itens do mês de origem sem par no mês de destino, com caixinha de seleção, valor editável e botão "Lançar N em <mês>" (cria como pendente, mesmo dia/categoria/conta/meio de pagamento; dia 31 vira o último dia do mês quando preciso). Botão de olho oculta o item quando você já lançou com outro nome.
+  - **Nos dois meses**: cada item com os dois valores e a diferença (▲/▼) colorida.
+  - **Só no mês de destino**: itens novos.
+- Indicadores no topo: Despesas, Receitas e Saldo com variação em R$ e %, e card "Falta lançar" com quanto as despesas ficariam se tudo fosse lançado.
+- Alterna entre Despesas e Receitas. Recorrentes e parcelados ficam ocultos por padrão (lançam sozinhos) e podem ser exibidos só para consulta.
+- O pareamento usa a descrição, sem diferenciar maiúsculas/minúsculas nem acentos (Luz = LUZ = luz).
+
+### Observação
+- Os indicadores somam pagos + pendentes e não incluem Dívida de Terceiros (mesmo critério do Relatório).
+
+---
+
 ## [1.5.0] — 16/11/2026
 
 ### Adicionado
