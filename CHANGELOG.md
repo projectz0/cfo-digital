@@ -6,6 +6,16 @@ Formato: [semver](https://semver.org/lang/pt-BR/) — `MAIOR.MENOR.CORREÇÃO`. 
 
 ---
 
+## [1.5.0] — 16/11/2026
+
+### Adicionado
+- Botão **"Parar recorrência"** na tela de edição de um lançamento recorrente. Encerra a série: o lançamento que você está vendo e os meses anteriores ficam como estão, os pendentes dos meses seguintes são removidos e nenhum mês novo é gerado. Pede confirmação antes. A recorrência fica pausada e pode ser reativada em Despesas → Recorrentes.
+
+### Modificado
+- A linha de botões do formulário agora quebra para a linha de baixo quando falta espaço (telas estreitas).
+
+---
+
 ## [1.4.0] — 16/11/2026
 
 ### Adicionado
