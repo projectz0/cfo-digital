@@ -250,7 +250,7 @@ label.btn-like:hover{background:var(--surf2)}
 .ck-lbl.disabled{opacity:.35;pointer-events:none}
 .inst-row{display:flex;align-items:center;gap:7px}
 .inst-row input{width:64px}
-.f-acts{display:flex;gap:8px}
+.f-acts{display:flex;gap:8px;flex-wrap:wrap}
 .edit-notice{font-size:13px;color:var(--blue);background:var(--blue-l);border-radius:var(--r-sm);padding:8px 12px;margin-bottom:12px}
 .rec-notice{font-size:13px;color:var(--teal);background:var(--teal-l);border-radius:var(--r-sm);padding:8px 12px;margin-bottom:12px}
 
@@ -1193,6 +1193,7 @@ label.btn-like:hover{background:var(--surf2)}
     <div class="f-acts">
       <button class="bp" onclick="saveTx()"><i class="ti ti-check"></i> <span id="fSaveLbl">Salvar</span></button>
       <button onclick="closeForm()"><i class="ti ti-x"></i> Cancelar</button>
+      <button id="fStopRecBtn" type="button" onclick="stopRecFromForm()" style="display:none;margin-left:auto;color:var(--red);border-color:var(--red)"><i class="ti ti-player-stop"></i> Parar recorrência</button>
     </div>
   </div>
 </div>
@@ -2901,6 +2902,7 @@ function openForm(type){
   document.getElementById('fTitle').textContent=type==='receita'?'Nova Receita':'Nova Despesa';
   document.getElementById('fAmtLbl').textContent='Valor total (R$) *';
   document.getElementById('fSaveLbl').textContent='Salvar';
+  document.getElementById('fStopRecBtn').style.display='none';
   document.getElementById('fNotice').style.display='none';
   document.getElementById('fRecNotice').style.display='none';
   document.getElementById('instLbl').style.display='flex';
@@ -2994,6 +2996,7 @@ function _editGo(id,scope){
   document.getElementById('fRec').checked=false;
   document.getElementById('fNotice').style.display='none';
   document.getElementById('fRecNotice').style.display='none';
+  document.getElementById('fStopRecBtn').style.display=(t.recorrente&&!t.installment)?'inline-flex':'none';
   _refreshAccountSelect(t.accountId||null);
   meioPagamentoSel=t.meioPagamento||null;
   renderMeioBtns(t.type);
@@ -3030,6 +3033,23 @@ function _editGo(id,scope){
   }
   document.getElementById('formWrap').style.display='flex';
   setTimeout(()=>document.getElementById('fDesc').focus(),50);
+}
+
+function stopRecFromForm(){
+  const t=state.transactions.find(x=>x.id===editId);if(!t||!t.recorrente)return;
+  const futN=state.transactions.filter(x=>x.recorrente===t.recorrente&&x.status==='pendente'&&x.date>t.date).length;
+  openModal('Parar recorrência','"'+t.description+'" — este mês e os anteriores ficam como estão. '+(futN?futN+' lançamento'+(futN>1?'s':'')+' pendente'+(futN>1?'s':'')+' dos próximos meses '+(futN>1?'serão removidos':'será removido')+' e ':'')+'nenhum mês novo será gerado. Alterações não salvas desta tela serão descartadas.',[
+    {label:'Parar recorrência',cls:'br',fn:'closeModal();_stopRecFromForm(\''+t.id+'\')'},
+    {label:'Cancelar',cls:'modal-cancel',fn:'closeModal()'}
+  ]);
+}
+function _stopRecFromForm(id){
+  const t=state.transactions.find(x=>x.id===id);if(!t||!t.recorrente)return;
+  const recId=t.recorrente,limite=t.date;
+  const rec=(state.recurrentes||[]).find(r=>r.id===recId);if(rec)rec.active=false;
+  state.transactions=state.transactions.filter(x=>x.recorrente!==recId||x.status!=='pendente'||x.date<=limite);
+  closeForm();save();render();
+  showToast('Recorrência encerrada — nenhum mês novo será gerado.','green');
 }
 
 function closeForm(){
