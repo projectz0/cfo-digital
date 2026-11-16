@@ -714,6 +714,7 @@ label.btn-like:hover{background:var(--surf2)}
     <li><button class="sb-item" data-page="metas" onclick="setPage('metas')"><i class="ti ti-target"></i>Metas</button></li>
     <li><button class="sb-item" data-page="calendario" onclick="setPage('calendario')"><i class="ti ti-calendar"></i>Calendário</button></li>
     <li><button class="sb-item" data-page="relatorio" onclick="setPage('relatorio')"><i class="ti ti-file-analytics"></i>Relatório</button></li>
+    <li><button class="sb-item" data-page="comparar" onclick="setPage('comparar')"><i class="ti ti-columns"></i>Comparar meses</button></li>
     <li><button class="sb-item" data-page="notas" onclick="setPage('notas')"><i class="ti ti-notebook"></i>Notas</button></li>
   </ul>
   <div class="sb-alerts-wrap" id="sbAlertsWrap" onclick="toggleAlerts()" title="Centro de Alertas">
@@ -941,6 +942,14 @@ label.btn-like:hover{background:var(--surf2)}
       <h1 class="page-title"><i class="ti ti-file-analytics" style="color:var(--blue)"></i> Relatório</h1>
     </div>
     <div id="relatorioView"></div>
+  </div>
+
+  <!-- PAGE: COMPARAR MESES -->
+  <div id="page-comparar" style="display:none">
+    <div class="page-hdr">
+      <h1 class="page-title"><i class="ti ti-columns" style="color:var(--blue)"></i> Comparar meses</h1>
+    </div>
+    <div id="compararView"></div>
   </div>
 
   <div id="page-notas" style="display:none">
@@ -1931,6 +1940,7 @@ function setPage(page){
   document.getElementById('page-calendario').style.display=page==='calendario'?'block':'none';
   document.getElementById('page-transferencias').style.display=page==='transferencias'?'block':'none';
   document.getElementById('page-relatorio').style.display=page==='relatorio'?'block':'none';
+  document.getElementById('page-comparar').style.display=page==='comparar'?'block':'none';
   document.getElementById('page-notas').style.display=page==='notas'?'block':'none';
   if(page==='notas')renderNotas();
   // set tab for list pages
@@ -1960,7 +1970,7 @@ function setPage(page){
   // Mobile: mostrar botão home e atualizar título quando não estiver no painel
   const mbHome=document.getElementById('mbHome');
   const mbTitle=document.getElementById('mbTitle');
-  const PAGE_LABELS={painel:'CFO Digital',receitas:'Receitas',despesas:'Despesas',terceiros:'Dívida de Terceiros',parcelados:'Parcelados',recorrentes:'Recorrentes',contas:'Contas & Cartões',faturas:'Faturas',metas:'Metas',calendario:'Calendário',transferencias:'Transferências',relatorio:'Relatório'};
+  const PAGE_LABELS={painel:'CFO Digital',receitas:'Receitas',despesas:'Despesas',terceiros:'Dívida de Terceiros',parcelados:'Parcelados',recorrentes:'Recorrentes',contas:'Contas & Cartões',faturas:'Faturas',metas:'Metas',calendario:'Calendário',transferencias:'Transferências',relatorio:'Relatório',comparar:'Comparar meses'};
   if(mbHome){mbHome.style.display=page==='painel'?'none':'flex';}
   if(mbTitle){
     if(page==='painel') mbTitle.innerHTML='<i class="ti ti-chart-pie" style="color:var(--green)"></i> CFO Digital';
@@ -2054,14 +2064,176 @@ function load(){
 }
 
 /* ── MONTH NAV ── */
-function prevMonth(){cm--;if(cm<0){cm=11;cy--}clearSel();ensureRecurrentes(cm,cy);relMes=cm;relAno=cy;render()}
-function nextMonth(){cm++;if(cm>11){cm=0;cy++}clearSel();ensureRecurrentes(cm,cy);relMes=cm;relAno=cy;render()}
+function prevMonth(){cm--;if(cm<0){cm=11;cy--}clearSel();ensureRecurrentes(cm,cy);relMes=cm;relAno=cy;cmpSyncToSidebar();render()}
+function nextMonth(){cm++;if(cm>11){cm=0;cy++}clearSel();ensureRecurrentes(cm,cy);relMes=cm;relAno=cy;cmpSyncToSidebar();render()}
 
 function getMonth(){
   return state.transactions.filter(t=>{
     const d=new Date(t.date+'T00:00:00');
     return d.getMonth()===cm&&d.getFullYear()===cy;
   });
+}
+
+/* ── COMPARAR MESES ── */
+let cmpA=null,cmpB=null,cmpTipo='despesa',cmpShowAuto=false,cmpSel=new Set(),cmpDismiss=new Set();
+const cmpEsc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const cmpNorm=s=>String(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().replace(/\s+/g,' ').trim();
+function cmpSyncToSidebar(){
+  cmpB={m:cm,y:cy};
+  cmpA=cm===0?{m:11,y:cy-1}:{m:cm-1,y:cy};
+  cmpSel=new Set();cmpDismiss=new Set();
+}
+function cmpMonthTxs(p){
+  return state.transactions.filter(t=>{
+    if(t.type==='transferencia')return false;
+    const d=new Date(t.date+'T00:00:00');
+    return d.getMonth()===p.m&&d.getFullYear()===p.y;
+  });
+}
+function cmpCompute(){
+  const keyOf=t=>cmpNorm(t.description)+(t.debtor?'|t':'');
+  const isAuto=t=>!!(t.recorrente||t.installment);
+  const byDate=(x,y)=>x.date.localeCompare(y.date)||x.description.localeCompare(y.description);
+  const allA=cmpMonthTxs(cmpA),allB=cmpMonthTxs(cmpB);
+  const A=allA.filter(t=>t.type===cmpTipo).sort(byDate),B=allB.filter(t=>t.type===cmpTipo).sort(byDate);
+  const bMap={};
+  B.forEach(t=>{(bMap[keyOf(t)]=bMap[keyOf(t)]||[]).push(t);});
+  const usedB=new Set(),pairs=[],missing=[];let hidden=0;
+  A.forEach(a=>{
+    if(isAuto(a)&&!cmpShowAuto)return;
+    const cand=(bMap[keyOf(a)]||[]).find(b=>!usedB.has(b.id));
+    if(cand){usedB.add(cand.id);pairs.push({a,b:cand});}
+    else if(cmpDismiss.has(a.id))hidden++;
+    else missing.push(a);
+  });
+  const onlyB=B.filter(b=>!usedB.has(b.id)&&(cmpShowAuto||!isAuto(b)));
+  return {allA,allB,pairs,missing,onlyB,hidden,isAuto};
+}
+function cmpToggle(id,on){if(on)cmpSel.add(id);else cmpSel.delete(id);cmpUpdateBulk();}
+function cmpSelAll(on){
+  document.querySelectorAll('#compararView input[data-cmp]').forEach(i=>{i.checked=on;if(on)cmpSel.add(i.dataset.cmp);else cmpSel.delete(i.dataset.cmp);});
+  cmpUpdateBulk();
+}
+function cmpUpdateBulk(){
+  const b=document.getElementById('cmpBulkBtn');if(!b)return;
+  const n=cmpSel.size;
+  b.disabled=!n;b.style.opacity=n?'1':'.5';b.style.cursor=n?'pointer':'not-allowed';
+  b.querySelector('span').textContent=n?'Lançar '+n+' em '+MONTHS[cmpB.m]+' '+cmpB.y:'Lançar selecionados';
+}
+function cmpSet(side,k,v){
+  const p=side==='A'?cmpA:cmpB;p[k]=+v;
+  cmpSel=new Set();cmpDismiss=new Set();renderComparar();
+}
+function cmpSetTipo(t){cmpTipo=t;cmpSel=new Set();cmpDismiss=new Set();renderComparar();}
+function cmpDismissItem(id){cmpDismiss.add(id);cmpSel.delete(id);renderComparar();}
+function cmpLaunch(){
+  const ids=[...cmpSel];if(!ids.length)return;
+  const pad=n=>String(n).padStart(2,'0');
+  const maxDay=new Date(cmpB.y,cmpB.m+1,0).getDate();
+  let n=0;
+  ids.forEach(id=>{
+    const a=state.transactions.find(x=>x.id===id);if(!a)return;
+    const inp=document.getElementById('cmpAmt-'+id);
+    let amt=parseFloat(inp&&inp.value);
+    amt=amt>0?parseFloat(amt.toFixed(2)):a.amount;
+    const dia=Math.min(new Date(a.date+'T00:00:00').getDate(),maxDay);
+    state.transactions.push({...a,id:uid(),date:cmpB.y+'-'+pad(cmpB.m+1)+'-'+pad(dia),amount:amt,status:'pendente',installment:null,recorrente:null,dataCompensacao:null});
+    n++;
+  });
+  cmpSel=new Set();
+  save();render();
+  showToast('✅ '+n+' lançamento'+(n>1?'s':'')+' criado'+(n>1?'s':'')+' em '+MONTHS[cmpB.m]+' '+cmpB.y,'green');
+}
+function renderComparar(){
+  const el=document.getElementById('compararView');if(!el)return;
+  if(cmpB===null)cmpSyncToSidebar();
+  const r=cmpCompute();
+  const lblA=MONTHS[cmpA.m]+' '+cmpA.y,lblB=MONTHS[cmpB.m]+' '+cmpB.y;
+  const isDes=cmpTipo==='despesa';
+  const tipoPl=isDes?'despesas':'receitas';
+  const sumT=(arr,type)=>arr.filter(t=>t.type===type&&!t.debtor).reduce((s,t)=>s+t.amount,0);
+  const desA=sumT(r.allA,'despesa'),desB=sumT(r.allB,'despesa'),recA=sumT(r.allA,'receita'),recB=sumT(r.allB,'receita');
+  const fmtS=v=>(v<0?'−':'')+fmt(v);
+  const vcard=(title,icon,a,b,goodDown)=>{
+    const diff=b-a,pct=a?Math.abs(diff/a*100):null,up=diff>0;
+    const good=diff===0?null:(goodDown?!up:up);
+    const col=good===null?'var(--txt3)':good?'var(--green)':'var(--red)';
+    const arrow=diff>0?'▲':diff<0?'▼':'●';
+    const sg=diff>0?'+':diff<0?'−':'';
+    return '<div style="background:var(--surf);border:1px solid var(--brd);border-radius:12px;padding:14px 16px">'
+      +'<div style="font-size:12px;font-weight:700;color:var(--txt3);text-transform:uppercase;letter-spacing:.04em"><i class="ti '+icon+'"></i> '+title+'</div>'
+      +'<div style="font-size:22px;font-weight:800;color:var(--txt);margin:4px 0 2px">'+fmtS(b)+'</div>'
+      +'<div style="font-size:12px;color:var(--txt3)">'+MONTHS[cmpA.m]+': '+fmtS(a)+'</div>'
+      +'<div style="font-size:13px;font-weight:700;color:'+col+';margin-top:6px">'+arrow+' '+sg+fmt(diff)+(pct!==null&&diff!==0?' ('+sg+pct.toFixed(1).replace('.',',')+'%)':'')+'</div></div>';
+  };
+  const manualMissing=r.missing.filter(t=>!r.isAuto(t));
+  const missTotal=manualMissing.reduce((s,t)=>s+t.amount,0);
+  const missCard='<div style="background:var(--surf);border:1px solid '+(manualMissing.length?'var(--amber,#F59E0B)':'var(--brd)')+';border-radius:12px;padding:14px 16px">'
+    +'<div style="font-size:12px;font-weight:700;color:var(--txt3);text-transform:uppercase;letter-spacing:.04em"><i class="ti ti-alert-triangle"></i> Falta lançar</div>'
+    +'<div style="font-size:22px;font-weight:800;color:var(--txt);margin:4px 0 2px">'+manualMissing.length+' '+(manualMissing.length===1?'item':'itens')+'</div>'
+    +'<div style="font-size:12px;color:var(--txt3)">'+(manualMissing.length?fmt(missTotal)+' de '+lblA+' ainda sem par em '+MONTHS[cmpB.m]:'Tudo de '+MONTHS[cmpA.m]+' já está em '+MONTHS[cmpB.m])+'</div>'
+    +(manualMissing.length&&isDes?'<div style="font-size:13px;font-weight:700;color:var(--txt2);margin-top:6px">Com tudo lançado: '+fmt(desB+manualMissing.filter(t=>!t.debtor).reduce((s,t)=>s+t.amount,0))+'</div>':'')+'</div>';
+  const selSt='padding:7px 10px;border-radius:8px;border:1.5px solid var(--brd2);background:var(--surf);color:var(--txt);font-size:14px';
+  const mOpt=sel=>MONTHS.map((m,i)=>'<option value="'+i+'"'+(i===sel?' selected':'')+'>'+m+'</option>').join('');
+  const yOpt=sel=>{const ys=[];for(let y=cy-3;y<=cy+3;y++)ys.push(y);if(!ys.includes(sel))ys.push(sel);return ys.sort((a,b)=>a-b).map(y=>'<option value="'+y+'"'+(y===sel?' selected':'')+'>'+y+'</option>').join('');};
+  const tipoBtn=(t,label,ic,col,bg,fg)=>'<button onclick="cmpSetTipo(\''+t+'\')" style="padding:7px 16px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;border:1.5px solid '+(cmpTipo===t?col:'var(--brd2)')+';background:'+(cmpTipo===t?bg:'var(--surf2)')+';color:'+(cmpTipo===t?fg:'var(--txt3)')+'"><i class="ti '+ic+'"></i> '+label+'</button>';
+  const box='background:var(--surf);border:1px solid var(--brd);border-radius:12px;overflow:hidden';
+  const hdr=(title,sub,color)=>'<div style="padding:12px 14px;border-bottom:1px solid var(--brd);background:var(--surf2)"><div style="font-size:14px;font-weight:800;color:'+color+'">'+title+'</div><div style="font-size:12px;color:var(--txt3);margin-top:2px">'+sub+'</div></div>';
+  const dayOf=t=>t.date.slice(8,10);
+  const empty=msg=>'<div style="padding:22px 14px;text-align:center;color:var(--txt3);font-size:13px">'+msg+'</div>';
+
+  let missingRows=r.missing.map(a=>{
+    const auto=r.isAuto(a);
+    const left=auto
+      ?'<span style="width:16px;flex-shrink:0"></span>'
+      :'<input type="checkbox" data-cmp="'+a.id+'"'+(cmpSel.has(a.id)?' checked':'')+' onchange="cmpToggle(\''+a.id+'\',this.checked)" style="width:16px;height:16px;flex-shrink:0;cursor:pointer">';
+    const right=auto
+      ?'<span style="font-size:12px;color:var(--txt3);white-space:nowrap">'+fmt(a.amount)+' · '+(a.installment?'parcela':'recorrente')+' (automático)</span>'
+      :'<input type="number" id="cmpAmt-'+a.id+'" step="0.01" min="0" value="'+a.amount+'" title="Valor a lançar" style="width:96px;padding:5px 7px;border-radius:7px;border:1.5px solid var(--brd2);background:var(--surf);color:var(--txt);font-size:13px;text-align:right">'
+        +'<button onclick="cmpDismissItem(\''+a.id+'\')" title="Já lancei com outro nome — ocultar" style="padding:5px 8px;border-radius:7px;border:1.5px solid var(--brd2);background:var(--surf2);color:var(--txt3);cursor:pointer;font-size:12px"><i class="ti ti-eye-off"></i></button>';
+    return '<div style="display:flex;align-items:center;gap:10px;padding:9px 14px;border-bottom:1px solid var(--brd);flex-wrap:wrap">'+left
+      +'<div style="flex:1;min-width:140px"><div style="font-size:14px;font-weight:600;color:var(--txt)">'+cmpEsc(a.description)+(a.debtor?' <span style="font-size:11px;color:var(--purple)">· '+cmpEsc(a.debtor)+'</span>':'')+'</div>'
+      +'<div style="font-size:12px;color:var(--txt3)">Dia '+dayOf(a)+' · '+cmpEsc(a.category||'Sem categoria')+'</div></div>'
+      +'<div style="display:flex;align-items:center;gap:6px">'+right+'</div></div>';
+  }).join('');
+  const bulkBar=manualMissing.length
+    ?'<div style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--brd);flex-wrap:wrap">'
+      +'<label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--txt2);cursor:pointer"><input type="checkbox" onchange="cmpSelAll(this.checked)" style="width:16px;height:16px"> Selecionar todos</label>'
+      +'<button id="cmpBulkBtn" onclick="cmpLaunch()" disabled style="margin-left:auto;display:flex;align-items:center;gap:6px;padding:7px 14px;border-radius:8px;background:var(--blue);border:none;color:#fff;font-size:13px;font-weight:700;opacity:.5;cursor:not-allowed"><i class="ti ti-plus"></i><span>Lançar selecionados</span></button></div>'
+    :'';
+  const hiddenNote=r.hidden?'<div style="padding:8px 14px;font-size:12px;color:var(--txt3)">'+r.hidden+' item'+(r.hidden>1?'s':'')+' oculto'+(r.hidden>1?'s':'')+' (já lançado'+(r.hidden>1?'s':'')+' com outro nome). <a href="#" onclick="cmpDismiss=new Set();renderComparar();return false" style="color:var(--blue)">Mostrar de novo</a></div>':'';
+
+  const pairRows=r.pairs.map(({a,b})=>{
+    const diff=b.amount-a.amount;
+    const col=diff===0?'var(--txt3)':((isDes?diff<0:diff>0)?'var(--green)':'var(--red)');
+    return '<div style="display:flex;align-items:center;gap:10px;padding:9px 14px;border-bottom:1px solid var(--brd);flex-wrap:wrap">'
+      +'<div style="flex:1;min-width:140px"><div style="font-size:14px;font-weight:600;color:var(--txt)">'+cmpEsc(b.description)+'</div>'
+      +'<div style="font-size:12px;color:var(--txt3)">'+MONTHS[cmpA.m]+': '+fmt(a.amount)+' · '+MONTHS[cmpB.m]+': '+fmt(b.amount)+'</div></div>'
+      +'<div style="font-size:13px;font-weight:700;color:'+col+';white-space:nowrap">'+(diff===0?'igual':(diff>0?'▲ +':'▼ −')+fmt(diff))+'</div></div>';
+  }).join('');
+  const onlyBRows=r.onlyB.map(b=>'<div style="display:flex;align-items:center;gap:10px;padding:9px 14px;border-bottom:1px solid var(--brd);flex-wrap:wrap"><div style="flex:1;min-width:140px"><div style="font-size:14px;font-weight:600;color:var(--txt)">'+cmpEsc(b.description)+'</div><div style="font-size:12px;color:var(--txt3)">Dia '+dayOf(b)+' · '+cmpEsc(b.category||'Sem categoria')+'</div></div><div style="font-size:13px;font-weight:700;color:var(--txt2)">'+fmt(b.amount)+'</div></div>').join('');
+
+  el.innerHTML=
+    '<div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px 10px;margin-bottom:14px">'
+    +'<span style="font-size:13px;font-weight:700;color:var(--txt3)">Comparar</span>'
+    +'<select onchange="cmpSet(\'A\',\'m\',this.value)" style="'+selSt+'">'+mOpt(cmpA.m)+'</select><select onchange="cmpSet(\'A\',\'y\',this.value)" style="'+selSt+'">'+yOpt(cmpA.y)+'</select>'
+    +'<span style="font-size:13px;font-weight:700;color:var(--txt3)">com</span>'
+    +'<select onchange="cmpSet(\'B\',\'m\',this.value)" style="'+selSt+'">'+mOpt(cmpB.m)+'</select><select onchange="cmpSet(\'B\',\'y\',this.value)" style="'+selSt+'">'+yOpt(cmpB.y)+'</select>'
+    +'</div>'
+    +'<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,200px),1fr));gap:10px;margin-bottom:6px">'
+    +vcard('Despesas','ti-arrow-down-circle',desA,desB,true)+vcard('Receitas','ti-arrow-up-circle',recA,recB,false)+vcard('Saldo','ti-scale',recA-desA,recB-desB,false)+missCard
+    +'</div>'
+    +'<div style="font-size:12px;color:var(--txt3);margin-bottom:14px">Valores = pagos + pendentes, sem Dívida de Terceiros. Variação de '+MONTHS[cmpB.m]+' em relação a '+MONTHS[cmpA.m]+'.</div>'
+    +'<div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-bottom:12px">'
+    +tipoBtn('despesa','Despesas','ti-arrow-down-circle','var(--red)','var(--red-l)','var(--red-d)')+tipoBtn('receita','Receitas','ti-arrow-up-circle','var(--green)','var(--green-l)','var(--green-d)')
+    +'<label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--txt2);cursor:pointer;margin-left:8px"><input type="checkbox"'+(cmpShowAuto?' checked':'')+' onchange="cmpShowAuto=this.checked;cmpSel=new Set();renderComparar()" style="width:16px;height:16px"> Mostrar recorrentes e parcelados (lançam sozinhos)</label></div>'
+    +'<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,360px),1fr));gap:14px;align-items:start">'
+    +'<div style="'+box+'">'+hdr('Falta lançar em '+lblB,manualMissing.length+' de '+lblA+' sem par em '+lblB+' ('+tipoPl+')','var(--red)')+bulkBar+(missingRows||empty('Nada faltando — tudo de '+lblA+' já está em '+lblB+'.'))+hiddenNote+'</div>'
+    +'<div style="display:flex;flex-direction:column;gap:14px">'
+    +'<div style="'+box+'">'+hdr('Nos dois meses',r.pairs.length+' '+tipoPl+' encontrad'+(isDes?'a':'o')+(r.pairs.length===1?'':'s')+' em '+MONTHS[cmpA.m]+' e '+MONTHS[cmpB.m],'var(--green)')+(pairRows||empty('Nenhum item em comum.'))+'</div>'
+    +'<div style="'+box+'">'+hdr('Só em '+lblB,r.onlyB.length+' '+(r.onlyB.length===1?'item novo':'itens novos')+', sem par em '+lblA,'var(--blue)')+(onlyBRows||empty('Nada exclusivo de '+MONTHS[cmpB.m]+'.'))+'</div>'
+    +'</div></div>';
+  cmpUpdateBulk();
 }
 
 /* ── NOTAS ── */
@@ -2282,6 +2454,7 @@ function render(){
   else if(currentPage==='calendario'){renderCalendario();}
   else if(currentPage==='transferencias'){renderTransferencias();}
   else if(currentPage==='relatorio'){renderRelatorio();}
+  else if(currentPage==='comparar'){renderComparar();}
   renderAlertBadge();
 }
 
