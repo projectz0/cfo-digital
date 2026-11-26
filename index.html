@@ -1257,6 +1257,9 @@ let currentUser=null;
 let lastKnownUpdatedAt=null; // timestamp da versão da nuvem que carregamos por último (controle de concorrência)
 let saveQueue=Promise.resolve(); // fila para evitar saves simultâneos correndo por cima um do outro
 let saveRetryTimer=null;
+let cloudReady=false; // true só depois de ler a nuvem com sucesso — sem isso nada é gravado nela
+let pendingSync=false; // há alteração local que ainda não chegou na nuvem
+let loadingPromise=null;
 
 /* ── AUTH UI ── */
 let authMode='login';
@@ -1426,8 +1429,15 @@ async function zerarConta(){
   showToast('✅ Conta zerada com sucesso.','green');
 }
 
+function resetSyncState(){
+  cloudReady=false;pendingSync=false;lastKnownUpdatedAt=null;
+  clearTimeout(saveRetryTimer);
+  hideLoadGate();
+}
+
 async function logout(){
-  await sb.auth.signOut();
+  try{await sb.auth.signOut();}catch(e){console.warn(e);}
+  resetSyncState();
   currentUser=null;
   demoActive=false;
   state={transactions:[],recurrentes:[],customCats:{receita:[],despesa:[]},catColors:{},accounts:[],metas:[],cartoes:[],notas:[]};
@@ -1463,13 +1473,15 @@ function setSyncStatus(status){
 }
 
 async function _doSaveToCloud(){
-  if(!currentUser)return;
+  if(!currentUser||!cloudReady)return;
   setSyncStatus('saving');
   try{
     // 1) Verifica se a nuvem tem uma versão mais nova que a que carregamos (conflito de outro dispositivo/aba)
     if(lastKnownUpdatedAt){
       const{data:cur,error:checkErr}=await sb.from('user_data').select('updated_at').eq('user_id',currentUser.id).single();
-      if(!checkErr&&cur&&cur.updated_at&&cur.updated_at>lastKnownUpdatedAt){
+      if(checkErr&&checkErr.code!=='PGRST116')throw checkErr; // sem conseguir conferir, não sobrescreve
+      if(cur&&cur.updated_at&&cur.updated_at>lastKnownUpdatedAt){
+        pendingSync=true;
         setSyncStatus('conflict');
         showConflictModal();
         return; // não sobrescreve — espera decisão do usuário
@@ -1479,6 +1491,7 @@ async function _doSaveToCloud(){
     const{error}=await sb.from('user_data').upsert({user_id:currentUser.id,data:state,updated_at:nowIso},{onConflict:'user_id'});
     if(error)throw error;
     lastKnownUpdatedAt=nowIso;
+    pendingSync=false;
     // 2) Grava snapshot no histórico (não bloqueia o fluxo principal se falhar)
     sb.from('user_data_history').insert({user_id:currentUser.id,data:state}).then(({error:histErr})=>{
       if(histErr)console.warn('Erro ao gravar histórico:',histErr);
@@ -1487,6 +1500,7 @@ async function _doSaveToCloud(){
     clearTimeout(saveRetryTimer);
   }catch(e){
     console.warn('Erro ao salvar na nuvem:',e);
+    pendingSync=true;
     setSyncStatus('error');
     // Retry automático em 8s
     clearTimeout(saveRetryTimer);
@@ -1518,7 +1532,8 @@ function showConflictModal(){
 }
 async function resolveConflictUseCloud(){
   document.getElementById('conflictModal')?.remove();
-  await loadFromCloud();
+  if(await loadFromCloud()!=='ok'){showToast('Não consegui carregar a nuvem. Tente de novo.','red');return;}
+  pendingSync=false;
   render();
   showToast('✅ Versão mais recente da nuvem carregada.','green');
 }
@@ -1529,8 +1544,17 @@ async function resolveConflictKeepMine(){
   showToast('✅ Suas alterações foram salvas por cima.','green');
 }
 
+// Cópia local do estado. Se não couber, apaga a antiga: sem cópia é melhor do que cópia velha.
+function cacheLocal(){
+  const json=JSON.stringify(state);
+  try{localStorage.setItem(KEY,json);return;}catch(e){}
+  try{localStorage.removeItem(LOCAL_HIST_KEY);localStorage.setItem(KEY,json);}
+  catch(e){try{localStorage.removeItem(KEY);}catch(_){}}
+}
+
+// Retorna 'ok' (carregou), 'empty' (conta sem dados na nuvem) ou 'error' (não foi possível saber)
 async function loadFromCloud(){
-  if(!currentUser)return false;
+  if(!currentUser)return 'error';
   try{
     const{data,error}=await sb.from('user_data').select('data,updated_at').eq('user_id',currentUser.id).single();
     if(error&&error.code!=='PGRST116')throw error;
@@ -1554,11 +1578,13 @@ async function loadFromCloud(){
         if(t.cartaoId===undefined)t.cartaoId=null;
         if(t.dataCompensacao===undefined)t.dataCompensacao=null;
       });
-      localStorage.setItem(KEY,JSON.stringify(state));
-      return true;
+      cacheLocal();
+      return 'ok';
     }
+    lastKnownUpdatedAt=null;
+    return 'empty';
   }catch(e){console.warn('Erro ao carregar da nuvem:',e)}
-  return false;
+  return 'error';
 }
 
 function showToast(msg,type='green'){
@@ -1575,8 +1601,11 @@ function showToast(msg,type='green'){
 
 async function recuperarDadosLocais(){
   if(!currentUser){showToast('Faça login primeiro','red');return;}
+  if(!cloudReady){showToast('Aguarde os dados da nuvem carregarem','red');return;}
+  const atual=state,qtdAtual=state.transactions.length;
   load();
-  if(state.transactions.length>0){
+  if(state!==atual&&state.transactions.length>0){
+    if(!confirm('Substituir os dados da nuvem ('+qtdAtual+' lançamentos) pela cópia deste aparelho ('+state.transactions.length+' lançamentos)?')){state=atual;return;}
     await saveToCloud();
     ensureRecurrentes(cm,cy);
     render();
@@ -1605,24 +1634,51 @@ function showApp(user){
 }
 
 /* ── INIT ── */
-async function loadAndRender(user){
+// Tela que bloqueia o app enquanto os dados da nuvem não chegam — evita editar sobre dado velho ou vazio
+function showLoadGate(failed){
+  let g=document.getElementById('loadGate');
+  if(!g){g=document.createElement('div');g.id='loadGate';document.body.appendChild(g);}
+  g.style.cssText='position:fixed;inset:0;z-index:20000;background:var(--bg,#0b0b0c);display:flex;align-items:center;justify-content:center;padding:20px';
+  g.innerHTML='<div style="background:var(--surf);border:1px solid var(--brd);border-radius:14px;max-width:400px;width:100%;padding:24px;text-align:center">'
+    +(failed
+      ?'<i class="ti ti-cloud-off" style="font-size:32px;color:#f59e0b"></i><div style="font-size:16px;font-weight:800;color:var(--txt);margin:8px 0">Não consegui carregar seus dados</div><div style="font-size:13px;color:var(--txt2);line-height:1.6;margin-bottom:18px">Para não sobrescrever nada, o app não abre com a cópia antiga deste aparelho. Seus dados na nuvem não foram alterados. Confira a internet e tente de novo.</div><div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap"><button class="bp" onclick="loadAndRender(currentUser)"><i class="ti ti-refresh"></i> Tentar novamente</button><button onclick="logout()">Sair</button></div>'
+      :'<i class="ti ti-loader-2" style="font-size:28px;color:var(--txt3);animation:spin .8s linear infinite"></i><div style="font-size:14px;color:var(--txt2);margin-top:10px">Carregando seus dados da nuvem...</div>')
+    +'</div>';
+}
+function hideLoadGate(){document.getElementById('loadGate')?.remove();}
+
+function loadAndRender(user){
+  // O login dispara isso duas vezes quase juntas; uma carga só por vez
+  if(!loadingPromise)loadingPromise=_loadAndRender(user).finally(()=>{loadingPromise=null;});
+  return loadingPromise;
+}
+
+async function _loadAndRender(user){
+  const sameSession=cloudReady&&currentUser&&currentUser.id===user.id; // reautenticação ao voltar pra aba
   showApp(user);
-  try{
-    const loaded=await loadFromCloud();
-    if(loaded){
-      // Dados vieram da nuvem - esconde botão de recuperar
-      document.getElementById('btnRecuperar').style.display='none';
-    }else{
-      load(); // fallback localStorage
-      // se tem dados locais, envia pra nuvem automaticamente
-      if(state.transactions.length>0){
-        document.getElementById('btnRecuperar').style.display='none';
-        await saveToCloud();
-        showToast('✅ Dados locais sincronizados com a nuvem!','green');
-      }
+  if(sameSession){
+    document.getElementById('btnRecuperar').style.display='none';
+    await saveQueue;
+    if(pendingSync)return; // não troca o que está na tela enquanto há alteração por enviar
+  }else{
+    cloudReady=false;
+    showLoadGate(false);
+  }
+  const res=await loadFromCloud();
+  if(!currentUser)return; // saiu da conta durante a carga
+  if(res==='error'){
+    if(!sameSession)showLoadGate(true); // nunca cai na cópia local nem envia nada pra nuvem
+    return;
+  }
+  cloudReady=true;
+  hideLoadGate();
+  document.getElementById('btnRecuperar').style.display='none';
+  if(res==='empty'){
+    load(); // conta nova: a nuvem confirmou que não há nada, pode migrar a cópia deste aparelho
+    if(state.transactions.length>0){
+      await saveToCloud();
+      showToast('✅ Dados locais sincronizados com a nuvem!','green');
     }
-  }catch(e){
-    load(); // fallback em caso de erro
   }
   ensureRecurrentes(cm,cy);
   render();
@@ -1844,6 +1900,7 @@ async function init(){
       if(awaitingNewPassword)return; // aguardando definir a nova senha antes de carregar dados
       await loadAndRender(session.user);
     }else if(event==='SIGNED_OUT'){
+      resetSyncState();
       currentUser=null;
       state={transactions:[],recurrentes:[],customCats:{receita:[],despesa:[]},catColors:{},accounts:[],metas:[],cartoes:[],notas:[]};
       document.getElementById('authOverlay').style.display='flex';
@@ -2028,14 +2085,17 @@ function pushLocalHistory(){
   try{
     let hist=JSON.parse(localStorage.getItem(LOCAL_HIST_KEY)||'[]');
     hist.push({t:Date.now(),data:state});
-    if(hist.length>15)hist=hist.slice(hist.length-15); // mantém só os últimos 15 saves
+    if(hist.length>3)hist=hist.slice(hist.length-3); // poucas cópias: 15 estouravam o limite do navegador
     localStorage.setItem(LOCAL_HIST_KEY,JSON.stringify(hist));
-  }catch(e){/* localStorage cheio ou indisponível — não bloqueia o save principal */}
+  }catch(e){
+    try{localStorage.removeItem(LOCAL_HIST_KEY);}catch(_){} // libera espaço pra cópia principal
+  }
 }
 function save(){
   if(demoActive)return; // dados de demonstração nunca tocam o storage real nem a nuvem
-  try{localStorage.setItem(KEY,JSON.stringify(state))}catch(e){}
+  if(currentUser&&!cloudReady)return; // dados ainda não carregados da nuvem
   pushLocalHistory();
+  cacheLocal();
   return saveToCloud(); // enfileirado, com retry e detecção de conflito
 }
 
