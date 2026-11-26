@@ -6,6 +6,20 @@ Formato: [semver](https://semver.org/lang/pt-BR/) — `MAIOR.MENOR.CORREÇÃO`. 
 
 ---
 
+## [1.6.1] — 26/11/2026
+
+### Corrigido (crítico — perda de dados)
+- **Cópia antiga do aparelho sobrescrevia a nuvem.** Se o app não conseguia carregar a nuvem ao abrir — ou se o navegador estava sem espaço para guardar a cópia local, o que era tratado como "falha ao carregar" — ele abria a cópia local (possivelmente velha) e **enviava por cima da nuvem**, apagando lançamentos recentes. Agora a cópia local nunca é enviada quando a leitura da nuvem falha: aparece uma tela com "Tentar novamente" e nada é gravado.
+- O histórico local guardava 15 cópias completas dos dados e estourava o limite do navegador, deixando a cópia principal parada numa versão velha. Agora guarda 3, e se faltar espaço a cópia antiga é descartada.
+- Se não der para conferir a versão da nuvem antes de salvar, o app não sobrescreve (tenta de novo).
+- Nada é gravado antes de os dados da nuvem terminarem de carregar.
+- "Recuperar dados locais" agora pede confirmação mostrando as quantidades.
+
+### Mudança de comportamento
+- Sem internet, o app não abre mais para edição com a cópia local; mostra a tela de "Tentar novamente".
+
+---
+
 ## [1.6.0] — 16/11/2026
 
 ### Adicionado
